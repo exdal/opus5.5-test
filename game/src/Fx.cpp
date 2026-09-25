@@ -171,11 +171,37 @@ auto World::impact_sparks(this World& self, glm::vec3 position, glm::vec2 direct
   self.emit(self.fx_sparks, position, glm::vec3(dir.x, 0.2f, dir.y) * 2.0f, 16);
 }
 
+// burnt out: every mesh of the wreck gets the charcoal material through the MeshComponent's material override
+static auto char_wreck(World& self, flecs::entity root) -> void {
+  auto& asset_man = ox::App::mod<ox::AssetManager>();
+  auto burnt = ox::UUID{};
+  if (auto fx = asset_man.get_model(self.assets.fx); fx && fx->materials.size() > 1) {
+    burnt = fx->materials[1];
+  }
+  if (!burnt || !root.is_alive()) {
+    return;
+  }
+  auto visit = [&](auto& visit_ref, flecs::entity e) -> void {
+    if (auto* mc = e.try_get_mut<ox::MeshComponent>()) {
+      mc->material_uuid = burnt;
+      e.modified<ox::MeshComponent>();
+    }
+    e.children([&](flecs::entity child) { visit_ref(visit_ref, child); });
+  };
+  visit(visit, root);
+}
+
 auto World::explode(this World& self, glm::vec2 position, bool by_player) -> void {
   // above the roof: particles are depth tested against the scene, emitted inside the car body they'd stay hidden
   const auto at = to3(position, 2.2f);
-  self.emit(self.fx_explosion, at, glm::vec3(0.0f, 2.0f, 0.0f), 120);
-  self.emit(self.fx_smoke, at, glm::vec3(0.0f, 1.5f, 0.0f), 50);
+  self.emit(self.fx_explosion, at, glm::vec3(0.0f, 2.0f, 0.0f), 200);
+  self.emit(self.fx_smoke, at, glm::vec3(0.0f, 1.5f, 0.0f), 60);
+  for (usize i = 0; i < self.cars.size(); i++) {
+    const auto& c = self.cars[i];
+    if (c.alive && c.exploded && c.entity.is_alive() && glm::distance(self.car_position(static_cast<CarID>(i)), position) < 0.1f) {
+      char_wreck(self, c.entity);
+    }
+  }
   self.emit(self.fx_sparks, at, glm::vec3(0.0f, 3.0f, 0.0f), 80);
   {
     const auto size = self.random_float(6.5f, 8.0f);

@@ -181,7 +181,7 @@ auto sparks(const ox::UUID& material) -> ox::ParticleSystem {
 auto explosion(const ox::UUID& material) -> ox::ParticleSystem {
   // the fireball: big additive blobs thrown out fast, braked hard by drag, growing as they cool
   auto system = ox::ParticleSystem{};
-  burst_emitter(system, 512, {0.35f, 0.8f}, ox::ParticleEmissionShape::Sphere, 0.8f);
+  burst_emitter(system, 512, {0.5f, 1.1f}, ox::ParticleEmissionShape::Sphere, 1.0f);
   system.render.material = material;
   system.render.billboard = ox::ParticleBillboardMode::FaceCamera;
   system.render.blend = ox::ParticleBlendMode::Additive;
@@ -190,13 +190,13 @@ auto explosion(const ox::UUID& material) -> ox::ParticleSystem {
   system.curves.push_back({.name = "Size", .points = {{0.0f, 0.6f}, {0.25f, 1.2f}, {1.0f, 1.6f}}});
   system.gradients.push_back({
     .name = "Fire",
-    .keys = {{0.0f, {9.0f, 7.0f, 3.0f, 1.0f}},
-             {0.25f, {6.0f, 2.2f, 0.3f, 1.0f}},
+    .keys = {{0.0f, {10.0f, 6.0f, 1.5f, 1.0f}},
+             {0.25f, {7.0f, 1.8f, 0.15f, 1.0f}},
              {0.7f, {1.2f, 0.25f, 0.02f, 0.6f}},
              {1.0f, {0.2f, 0.05f, 0.0f, 0.0f}}},
   });
-  add_common_spawn(system, 3.0f, 9.0f, 1.6f);
-  add_common_update(system, -2.0f, 2.8f, 3.5f);
+  add_common_spawn(system, 5.0f, 13.0f, 2.2f);
+  add_common_update(system, -2.0f, 4.0f, 3.0f);
   return system;
 }
 
@@ -216,8 +216,8 @@ auto smoke(const ox::UUID& material) -> ox::ParticleSystem {
              {0.1f, {0.06f, 0.055f, 0.05f, 0.75f}},
              {1.0f, {0.18f, 0.18f, 0.18f, 0.0f}}},
   });
-  add_common_spawn(system, 0.2f, 0.8f, 1.2f);
-  add_common_update(system, -1.6f, 2.4f, 0.8f);
+  add_common_spawn(system, 0.2f, 0.8f, 1.8f);
+  add_common_update(system, -1.6f, 3.6f, 0.8f);
   return system;
 }
 

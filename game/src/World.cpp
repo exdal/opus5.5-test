@@ -47,7 +47,7 @@ static auto find_asset(std::string_view relative) -> ox::UUID {
 // whole session keeps them resident.
 static auto runtime_models(const AssetTable& a) -> std::vector<ox::UUID> {
   auto models = std::vector<ox::UUID>(a.peds.begin(), a.peds.end());
-  models.insert(models.end(), {a.cop, a.guard, a.sedan, a.sports, a.taxi, a.police, a.van, a.wheel, a.cash, a.tracer, a.marker, a.knife});
+  models.insert(models.end(), {a.cop, a.guard, a.sedan, a.sports, a.taxi, a.police, a.van, a.wheel, a.cash, a.tracer, a.marker, a.knife, a.fx});
   models.insert(models.end(), a.blood_decals.begin(), a.blood_decals.end());
   models.insert(models.end(), a.scorch_decals.begin(), a.scorch_decals.end());
   models.insert(models.end(), a.blood_streaks.begin(), a.blood_streaks.end());
@@ -127,6 +127,7 @@ auto World::init(this World& self) -> bool {
   a.tracer = find_asset("Models/Props/tracer.glb");
   a.marker = find_asset("Models/Props/marker.glb");
   a.knife = find_asset("Models/Props/knife.glb");
+  a.fx = find_asset("Models/Props/fx.glb");
   for (usize i = 0; i < a.blood_decals.size(); i++) {
     a.blood_decals[i] = find_asset(fmt::format("Models/Props/blood_{}.glb", i));
   }

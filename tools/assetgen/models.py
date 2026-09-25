@@ -836,6 +836,11 @@ def fx() -> Node:
     g = Geo()
     g.quad((-0.5, 0.0, 0.5), (0.5, 0.0, 0.5), (0.5, 0.0, -0.5), (-0.5, 0.0, -0.5), (0, 1, 0))
     root.add(g, dot)
+    # charcoal for burnt out wrecks, swapped onto a car's meshes when it blows up (material 1 of this model)
+    burnt = root.child("burnt", (0.0, 0.0, 2.0))
+    b = Geo()
+    b.quad((-0.5, 0.0, 0.5), (0.5, 0.0, 0.5), (0.5, 0.0, -0.5), (-0.5, 0.0, -0.5), (0, 1, 0))
+    burnt.add(b, mat("fx_burnt", "#1c1a18", roughness=0.95))
     return root
 
 

@@ -252,7 +252,7 @@ struct AssetTable {
   ox::UUID road_straight = {}, road_cross = {}, block = {}, park = {}, bank = {}, vault_door = {};
   std::array<ox::UUID, 6> buildings = {};
   ox::UUID street_lamp = {}, tree = {}, ground = {};
-  ox::UUID cash = {}, tracer = {}, marker = {}, knife = {};
+  ox::UUID cash = {}, tracer = {}, marker = {}, knife = {}, fx = {};
   std::array<ox::UUID, 4> blood_decals = {};
   std::array<ox::UUID, 2> scorch_decals = {};
   std::array<ox::UUID, 4> blood_streaks = {}; // directional spatter, thrown along +z from the origin

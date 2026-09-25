@@ -227,6 +227,19 @@ as the proper upstream fix, when that differs from what I did.
 - **Upstream suggestion:** take it, or fold removal into the existing pass by giving it a list of
   world boxes for both cases (moved instances could contribute their previous box the same way).
 
+### 14. Particles run on the scene's clock
+- **Files:** `Oxylus/src/Render/RendererInstance.cpp` (`update`), `Oxylus/src/Scene/Scene.cpp`
+  (`runtime_step`), `Oxylus/include/Scene/Scene.hpp`
+- **Symptom:** particles ignored pause, hit-stop and fixed time steps. Headless on lavapipe (about 1 s
+  of real time per frame) every short-lived effect (muzzle flash, sparks, fireball) was born and
+  dead within one frame and never appeared. Only long-lived smoke showed.
+- **Cause:** the particle simulation's delta was `App::get_timestep()` (wall clock), while everything
+  else in a running scene advances by what the game passes to `runtime_step`.
+- **Change:** `runtime_step` records `last_step_delta` (0 while the gameplay phases are disabled, i.e.
+  paused). A running scene simulates its particles with it; outside play mode (the editor) particles
+  keep real time.
+- **Upstream suggestion:** take it. It also makes particles deterministic for replays and tests.
+
 ## Validation status
 
 Run on lavapipe with Khronos validation 1.3.275 (`tools/run_headless.sh --validation`), 200 frames
