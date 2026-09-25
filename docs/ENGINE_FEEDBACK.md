@@ -27,6 +27,7 @@ miniaudio and asset cooking. It ran headless on llvmpipe with 4 CPU cores.
 | B12 | High | **Vulkan validation errors in the renderer**: invalid SPIR-V in `scene.slang` (`!` on a uint), 13 images cleared without `TRANSFER_DST` usage, and FSR3 history images sampled in the wrong layout every frame (wrong `last_access` on `acquire_ia`). The project owner hit a device lost on a real GPU. | `scene.slang`, `RendererInstance.cpp`, `Passes/*` | **fixed locally** (patches 6-8) |
 | B13 | High | A parked (sleeping) Jolt vehicle **can never be driven off**: waking it through `MotionProperties` doesn't activate the body. | `Scene.cpp` `vehicle_input` | **fixed locally** (patch 9) |
 | B14 | Low | Culling shaders fail the 1.3.275 spirv-val (`AliasedPointer`/`RestrictPointer` missing on function-local PSB pointer variables), and one descriptor set layout leaks at shutdown. | Slang codegen, RenderContext | noted |
+| B15 | High | **GPU hang (AMD) the first time a model with new materials is spawned from game code.** Materials are uploaded in `Renderer::update`, which runs before later modules, so the frame that spawns the model draws with material indices the GPU buffer doesn't have yet. In OxCity that's the first cash pickup (robbing a ped) or the first tracer. Lavapipe tolerates the stale read, radv hangs in the VSM mesh-shader draw. | `RendererInstance::update`, `Renderer::sync_materials` | **fixed locally** (patch 10) |
 | B11 | Cosmetic | First run logs `ERR File error: Unknown, Path: context_config.toml`. A missing config on first launch is normal, it shouldn't be an error. | `ContextCVar::load` | noted |
 
 ## Missing features / API friction (ranked)
@@ -96,6 +97,12 @@ miniaudio and asset cooking. It ran headless on llvmpipe with 4 CPU cores.
 - `--vulkan-validation` is built into the engine, which is great. With validation on, the engine's
   own shaders and renderer produced errors on the very first frame (B12). It would pay to run the
   editor with validation in CI, even on lavapipe: everything in B12 reproduces there with no GPU.
+- **Lavapipe hides out-of-bounds GPU reads.** Both GPU crashes the project owner hit on AMD (B12, B15)
+  ran for hundreds of frames on lavapipe without a hitch. The radv hang dump (`RADV_DEBUG=hang`) was the
+  useful artifact: `pipeline.log` names the bound pipeline, and its NIR lists the bindings by their
+  Slang names, so it maps straight back to a `.slang` file. Enabling `robustBufferAccess2` in a debug
+  build, or a debug assert that every `material_index` is below the uploaded material count, would
+  have turned B15 into a readable error.
 - `acquire_ia(name, image, last_access)` is the easiest vuk API to get wrong: `last_access` means
   "how the previous frame left it", not "how I'm about to use it". A comment, or a helper that
   records the real last access at the end of the frame, would prevent the FSR3 class of bug.

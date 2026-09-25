@@ -184,4 +184,42 @@ The same session's full autoplay run also caught a gameplay-breaking engine bug:
 was undrivable**. The autoplay stole one, floored it, and logged "drove 0 m". Jolt had put the
 parked chassis to sleep, and the engine's wake-up (writing the velocity through
 `MotionProperties`) doesn't activate a body. Traffic never noticed because it never stops long
-enough to sleep. Fixed with `BodyInterface::ActivateBody` (patch 9).
+enough to sleep. Fixed with `BodyInterface::ActivateBody` (patch 9). A rerun of the same script then drove the
+stolen parked car 17 m in its 14 s driving slot, where it had moved 0 m before.
+
+## Day 2: the pedestrian that hung the GPU
+
+With validation off, the project owner got into the game on their AMD card, and then "when I touch
+any peds, I get a GPU crash". They sent a `RADV_DEBUG=hang` dump: the command stream, the bound
+pipeline's NIR/ISA and its SPIR-V.
+
+Reading it:
+- The compute (ACE) stream ends in `DISPATCH_TASKMESH_INDIRECT_MULTI_ACE` with `COUNT 10, STRIDE 12`:
+  a mesh-shader draw with an indirect count of up to 10. That's the VSM "draw dirty clipmaps" pass,
+  one draw per directional clipmap.
+- `pipeline.log` confirms it: the task stage binds `draw_clipmaps`, `visibility`, `meshlet_instances`,
+  `hpb`, and the pixel stage binds `page_tables`, `physical_pages`, `clipmaps` and `materials`. That's
+  `rmvsm_draw_physical_pages_ms.slang` exactly.
+
+None of that is ped-specific, so the question was what "touching a ped" changes on the scene side.
+Peds have no physics bodies in OxCity; walking up to one only shows the "HOLD E: ROB" prompt, and
+robbing (or killing) one **spawns the first cash pickup of the session**. That's the first model
+loaded after startup. The chain from there:
+
+1. The game module loads `cash.glb` inside its `update`, which creates new Material assets and marks
+   them dirty.
+2. The Renderer uploads dirty materials in `Renderer::update`, but that module already ran this frame,
+   because modules update in registration order and the game comes last.
+3. The same frame renders the pickup with a `material_index` past the end of the GPU materials buffer
+   (or into the uninitialized half of a buffer that grew by doubling).
+4. The VSM pixel shader reads garbage flags, sees `HasAlbedoImage`, and samples a garbage bindless
+   index. Radv hangs. Lavapipe shrugs and draws the next frame correctly.
+
+The fix is one line in `RendererInstance::update`: sync materials right before acquiring the buffer
+(patch 10). The comment above it said "already synced by the renderer", which is only true if nothing
+loads a model after the Renderer's update. That's what every game does.
+
+What I'd take away as an engine user: **ordering by module registration is invisible API.** Nothing in
+`App::with<>` tells you that a module registered after `Renderer` can't load assets and draw them in
+the same frame. Either state sync belongs in the render path (as patched), or the engine needs a
+documented "pre-render" phase.

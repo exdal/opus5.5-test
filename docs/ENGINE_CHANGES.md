@@ -139,6 +139,26 @@ as the proper upstream fix, when that differs from what I did.
   Jolt's own vehicle samples do. Brake or handbrake alone doesn't wake it, so parked cars holding the
   handbrake still sleep.
 
+### 10. Sync materials before the frame reads them
+- **File:** `Oxylus/src/Render/RendererInstance.cpp` (`RendererInstance::update`)
+- **Symptom:** on the project owner's AMD GPU (radv), the game hung the GPU as soon as the player
+  interacted with a pedestrian. The radv hang dump showed the GPU stuck in the VSM mesh-shader draw
+  (`rmvsm_draw_physical_pages_ms`, pixel stage reading `materials[]`). Lavapipe never showed it.
+- **Cause:** `Renderer::sync_materials` (which grows the global materials buffer and uploads dirty
+  materials) only runs in `Renderer::update`. Modules update in registration order, so it runs
+  **before** any game module registered after `DefaultModules`. Robbing or killing a ped spawns the
+  first cash pickup, the first shot spawns the first tracer, and each loads a model with new
+  materials during the game's update. That same frame, `Scene::prepare_render` hands the GPU mesh
+  instances whose `material_index` points past the end of the materials buffer, or into its
+  uninitialized slack. The garbage flags and texture indices hang radv. The materials only reach the
+  GPU a frame later.
+- **Change:** `RendererInstance::update` calls `renderer.sync_materials()` right before it acquires
+  the materials buffer. It's a no-op when nothing is dirty. The comment that said "already synced by
+  the renderer" was the assumption that broke.
+- **Upstream suggestion:** take it, or sync inside `Renderer::get_materials_buffer`. The general
+  problem is that GPU-side state is synced in module `update`, which depends on module order. Any
+  asset loaded from a later module (the editor included) has the same one-frame gap.
+
 ## Validation status
 
 Run on lavapipe with Khronos validation 1.3.275 (`tools/run_headless.sh --validation`), 200 frames
