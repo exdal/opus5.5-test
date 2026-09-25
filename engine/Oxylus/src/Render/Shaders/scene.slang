@@ -203,7 +203,9 @@ public struct Material {
   // maps rebuild z from the unscaled xy, since that reconstruction assumes a unit vector, and only
   // then does glTF's normalTexture.scale widen the xy.
   public func sample_tangent_normal<S : IUVSample>(in S s) -> f32x3 {
-    if (!(this.flags & MaterialFlag::HasNormalImage)) {
+    // compare instead of `!`: slang lowers `!` on the u32 flags to OpLogicalNot on a uint, which is invalid
+    // SPIR-V (VUID-VkShaderModuleCreateInfo-pCode-08737), `!` is only valid on bools
+    if ((this.flags & MaterialFlag::HasNormalImage) == MaterialFlag::None) {
         return f32x3(0.0, 0.0, 1.0);
     }
 
