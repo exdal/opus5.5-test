@@ -78,6 +78,9 @@ public:
   // world-space (center, size) boxes of mesh instances removed since the last prepare_render, for the VSM to
   // invalidate the shadow pages they were drawn into
   std::vector<glm::vec4> removed_mesh_bounds = {};
+  // how far the last runtime_step advanced the simulation (0 while the gameplay phases are disabled). Particles use
+  // it so they pause, slow down and step in lockstep with everything else in the scene
+  f32 last_step_delta = 0.0f;
   SlotMap<GPU::Transforms, GPU::TransformID> transforms = {};
   ankerl::unordered_dense::map<flecs::entity, GPU::TransformID> entity_transforms_map = {};
   ankerl::unordered_dense::map<u32, flecs::entity> transform_index_entities_map = {};

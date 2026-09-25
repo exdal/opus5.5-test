@@ -1183,6 +1183,7 @@ auto Scene::runtime_step(this Scene& self, f32 delta_seconds) -> void {
 
   auto pre_update_phase_enabled = !self.world.entity(flecs::PreUpdate).has(flecs::Disabled);
   auto on_update_phase_enabled = !self.world.entity(flecs::OnUpdate).has(flecs::Disabled);
+  self.last_step_delta = pre_update_phase_enabled && on_update_phase_enabled ? delta_seconds : 0.0f;
   if (pre_update_phase_enabled && on_update_phase_enabled) {
     for (auto& [_, system] : self.lua_systems) {
       system->on_scene_update(&self, delta_seconds);
