@@ -1,0 +1,10 @@
+# Sandboxed toolchain, package caches and temp files (see tools/sandbox/bootstrap.sh)
+/.sandbox/
+# Build output
+/build/
+/.xmake/
+/engine/.xmake/
+/engine/build/
+/captures/
+compile_commands.json
+__pycache__/
