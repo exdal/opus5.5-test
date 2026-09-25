@@ -96,7 +96,7 @@ auto RendererInstance::apply_bloom(this RendererInstance& self, PostProcessConte
 
   auto bloom_downsampled_attachment = vuk::declare_ia(
     "bloom downsampled",
-    {.usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+    {.usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eTransferDst,
      .sample_count = vuk::SampleCountFlagBits::e1,
      .layer_count = 1}
   );

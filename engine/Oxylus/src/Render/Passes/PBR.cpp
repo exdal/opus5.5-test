@@ -272,7 +272,7 @@ auto RendererInstance::generate_ambient_occlusion(this RendererInstance& self, A
 
   auto vbgtao_depth_attachment = vuk::declare_ia(
     "vbgtao depth",
-    {.usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+    {.usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eTransferDst,
      .format = vuk::Format::eR32Sfloat,
      .sample_count = vuk::Samples::e1,
      .level_count = 5,
@@ -316,7 +316,7 @@ auto RendererInstance::generate_ambient_occlusion(this RendererInstance& self, A
 
   auto vbgtao_noisy_occlusion_attachment = vuk::declare_ia(
     "vbgtao noisy occlusion",
-    {.usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+    {.usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eTransferDst,
      .format = vuk::Format::eR8Unorm,
      .sample_count = vuk::Samples::e1}
   );

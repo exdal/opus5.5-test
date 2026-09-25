@@ -306,14 +306,16 @@ RendererInstance::RendererInstance(Scene& owner_scene, Renderer& parent_renderer
   sky_transmittance_lut = Texture::create({
     .format = vuk::Format::eR16G16B16A16Sfloat,
     .extent = vuk::Extent3D{.width = 256u, .height = 64u, .depth = 1u},
-    .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+    // cleared with vuk::clear_image (vkCmdClearColorImage) below, which needs transfer dst
+    .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eTransferDst,
   });
   OX_ASSERT(sky_transmittance_lut);
 
   sky_multiscatter_lut = Texture::create({
     .format = vuk::Format::eR16G16B16A16Sfloat,
     .extent = vuk::Extent3D{.width = 32u, .height = 32u, .depth = 1u},
-    .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+    // cleared with vuk::clear_image (vkCmdClearColorImage) below, which needs transfer dst
+    .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eTransferDst,
   });
   OX_ASSERT(sky_multiscatter_lut);
 
@@ -359,7 +361,8 @@ RendererInstance::RendererInstance(Scene& owner_scene, Renderer& parent_renderer
     .extent = vuk::Extent3D{.width = 32u, .height = 32u, .depth = 1u},
     .layer_count = 6u,
     .image_flags = vuk::ImageCreateFlagBits::eCubeCompatible,
-    .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+    // cleared with vuk::clear_image (vkCmdClearColorImage) below, which needs transfer dst
+    .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eTransferDst,
     .view_type = vuk::ImageViewType::eCube,
   });
   OX_ASSERT(sky_cubemap);
@@ -393,7 +396,8 @@ RendererInstance::RendererInstance(Scene& owner_scene, Renderer& parent_renderer
       },
     .layer_count = RMVSMContext::MAX_DIRECTIONAL_CLIPMAP_COUNT,
     .level_count = 1,
-    .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled,
+    // cleared with vuk::clear_image (vkCmdClearColorImage), which needs transfer dst
+    .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
     .view_type = vuk::ImageViewType::e2DArray,
 
   });
@@ -413,7 +417,8 @@ RendererInstance::RendererInstance(Scene& owner_scene, Renderer& parent_renderer
       },
     .layer_count = RMVSMContext::POINT_SPOT_LAYER_COUNT,
     .level_count = RMVSMContext::POINT_SPOT_MIP_COUNT,
-    .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled,
+    // cleared with vuk::clear_image (vkCmdClearColorImage), which needs transfer dst
+    .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
     .view_type = vuk::ImageViewType::e2DArray,
   });
 
@@ -734,7 +739,7 @@ auto RendererInstance::render(
 
   auto hiz_attachment = vuk::declare_ia(
     "hiz",
-    {.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled,
+    {.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
      .extent = hiz_extent,
      .format = vuk::Format::eR32Sfloat,
      .sample_count = vuk::SampleCountFlagBits::e1,
@@ -755,7 +760,8 @@ auto RendererInstance::render(
   auto sky_view_lut_attachment = vuk::declare_ia(
     "sky_view_lut",
     {.image_type = vuk::ImageType::e2D,
-     .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+     // cleared with vuk::clear_image (vkCmdClearColorImage) below, which needs transfer dst
+    .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eTransferDst,
      .extent = self.sky_view_lut_extent,
      .format = vuk::Format::eR16G16B16A16Sfloat,
      .sample_count = vuk::Samples::e1,
@@ -768,7 +774,8 @@ auto RendererInstance::render(
   auto sky_aerial_perspective_attachment = vuk::declare_ia(
     "sky aerial perspective",
     {.image_type = vuk::ImageType::e3D,
-     .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+     // cleared with vuk::clear_image (vkCmdClearColorImage) below, which needs transfer dst
+    .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eTransferDst,
      .extent = self.sky_aerial_perspective_lut_extent,
      .sample_count = vuk::Samples::e1,
      .view_type = vuk::ImageViewType::e3D,
@@ -912,7 +919,7 @@ auto RendererInstance::render(
 
   auto vbgtao_occlusion_attachment = vuk::declare_ia(
     "vbgtao occlusion",
-    {.usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+    {.usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eTransferDst,
      .format = vuk::Format::eR8Unorm,
      .sample_count = vuk::Samples::e1,
      .view_type = vuk::ImageViewType::e2D,
@@ -1892,7 +1899,7 @@ auto RendererInstance::render(
     };
     bloom_upsampled_attachment = vuk::declare_ia(
       "bloom upsampled",
-      {.usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+      {.usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eTransferDst,
        .extent = bloom_extent,
        .format = vuk::Format::eB10G11R11UfloatPack32,
        .sample_count = vuk::SampleCountFlagBits::e1,
@@ -1903,7 +1910,7 @@ auto RendererInstance::render(
   } else {
     bloom_upsampled_attachment = vuk::declare_ia(
       "bloom disabled",
-      {.usage = vuk::ImageUsageFlagBits::eSampled,
+      {.usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
        .extent = {1, 1, 1},
        .format = vuk::Format::eB10G11R11UfloatPack32,
        .sample_count = vuk::SampleCountFlagBits::e1,
