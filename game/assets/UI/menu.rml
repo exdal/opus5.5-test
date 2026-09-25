@@ -1,0 +1,25 @@
+<rml>
+<head>
+	<title>OxCity Menu</title>
+	<link type="text/rcss" href="style.rcss"/>
+</head>
+<body data-model="hud">
+	<div id="menu" data-if="menu_visible">
+		<div id="title">OXCITY</div>
+		<div id="tagline" data-if="!paused">Steal cars. Rob banks. Don't get busted.</div>
+		<div id="tagline" data-if="paused">- PAUSED -</div>
+
+		<button class="button" data-event-click="start" data-if="!paused">NEW GAME</button>
+		<button class="button" data-event-click="start" data-if="paused">RESUME</button>
+		<button class="button" data-event-click="quit">QUIT</button>
+
+		<div id="controls">
+			WASD / ARROWS move &amp; drive &#160;&#160; SHIFT sprint &#160;&#160; SPACE handbrake<br/>
+			F / ENTER get in &amp; out (or carjack) &#160;&#160; CTRL / LMB attack &#160;&#160; Q switch weapon<br/>
+			E hold near someone to rob them, or at the bank's green marker to crack the vault<br/>
+			H horn &#160;&#160; ESC pause
+		</div>
+		<div id="stats-line" data-if="paused">{{ stats }}</div>
+	</div>
+</body>
+</rml>

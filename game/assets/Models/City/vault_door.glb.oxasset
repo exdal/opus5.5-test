@@ -1,0 +1,78 @@
+{
+  "uuid": "390f52eb-a0e2-45a5-a30f-be1a91b5201b",
+  "type": 2,
+  "source_hash": "8E0BEDD9E980700F",
+  "textures": [],
+  "materials": [
+    {
+      "uuid": "f4f2d37e-66aa-48ab-a408-0358c5d00991",
+      "sampling_mode": 0,
+      "albedo_color": {
+        "x": 0.266356,
+        "y": 0.287441,
+        "z": 0.318547,
+        "w": 1
+      },
+      "uv_size": {
+        "x": 1,
+        "y": 1
+      },
+      "uv_offset": {
+        "x": 0,
+        "y": 0
+      },
+      "emissive_color": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "roughness_factor": 0.35,
+      "metallic_factor": 0.9,
+      "normal_scale": 1,
+      "occlusion_strength": 1,
+      "alpha_mode": 0,
+      "alpha_cutoff": 0.5,
+      "flip_normal_y": false,
+      "albedo_texture": "00000000-0000-0000-0000-000000000000",
+      "normal_texture": "00000000-0000-0000-0000-000000000000",
+      "emissive_texture": "00000000-0000-0000-0000-000000000000",
+      "metallic_roughness_texture": "00000000-0000-0000-0000-000000000000",
+      "occlusion_texture": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "uuid": "8795ff87-c8e7-44df-ae02-4810dacf10ec",
+      "sampling_mode": 0,
+      "albedo_color": {
+        "x": 0.672443,
+        "y": 0.686685,
+        "z": 0.715693,
+        "w": 1
+      },
+      "uv_size": {
+        "x": 1,
+        "y": 1
+      },
+      "uv_offset": {
+        "x": 0,
+        "y": 0
+      },
+      "emissive_color": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "roughness_factor": 0.2,
+      "metallic_factor": 1,
+      "normal_scale": 1,
+      "occlusion_strength": 1,
+      "alpha_mode": 0,
+      "alpha_cutoff": 0.5,
+      "flip_normal_y": false,
+      "albedo_texture": "00000000-0000-0000-0000-000000000000",
+      "normal_texture": "00000000-0000-0000-0000-000000000000",
+      "emissive_texture": "00000000-0000-0000-0000-000000000000",
+      "metallic_roughness_texture": "00000000-0000-0000-0000-000000000000",
+      "occlusion_texture": "00000000-0000-0000-0000-000000000000"
+    }
+  ]
+}

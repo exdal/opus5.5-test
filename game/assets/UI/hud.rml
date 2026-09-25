@@ -1,0 +1,36 @@
+<rml>
+<head>
+	<title>OxCity HUD</title>
+	<link type="text/rcss" href="style.rcss"/>
+</head>
+<body data-model="hud">
+	<div id="money" data-if="!menu_visible">${{ money }}</div>
+
+	<div id="stars" data-if="!menu_visible">
+		<div class="star" data-class-lit="wanted >= 1"></div>
+		<div class="star" data-class-lit="wanted >= 2"></div>
+		<div class="star" data-class-lit="wanted >= 3"></div>
+		<div class="star" data-class-lit="wanted >= 4"></div>
+		<div class="star" data-class-lit="wanted >= 5"></div>
+	</div>
+
+	<div id="pager" data-if="pager != '' &amp;&amp; !menu_visible">{{ pager }}</div>
+
+	<div id="health" data-if="!menu_visible">
+		<div id="health-bar"><div id="health-fill" data-style-width="health + '%'"></div></div>
+		<div id="weapon">{{ weapon }}<span data-if="weapon == 'PISTOL'">  x{{ ammo }}</span></div>
+	</div>
+
+	<div id="prompt" data-if="prompt != '' &amp;&amp; !menu_visible">{{ prompt }}</div>
+
+	<div id="vehicle" data-if="vehicle != '' &amp;&amp; !menu_visible">{{ vehicle }}<br/><span>{{ speed }} KM/H</span></div>
+
+	<div id="heist" data-if="heist_active">
+		DRILLING THE VAULT... {{ heist_progress }}%
+		<div id="heist-bar"><div id="heist-fill" data-style-width="heist_progress + '%'"></div></div>
+	</div>
+
+	<div id="big-text" data-if="big_text != ''">{{ big_text }}</div>
+	<div id="big-sub" data-if="big_text != ''">{{ stats }}</div>
+</body>
+</rml>

@@ -1,0 +1,212 @@
+/* OxCity UI, GTA 2 flavoured: chunky yellow numbers, a green pager, flat colour blocks */
+
+body, div, p, h1, h2, span, button {
+	display: block;
+}
+span {
+	display: inline;
+}
+
+body {
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	font-family: Fira Sans;
+	font-weight: normal;
+	font-size: 18dp;
+	color: #ffffff;
+}
+
+/* ---------- hud ---------- */
+
+#money {
+	position: absolute;
+	top: 18dp;
+	right: 26dp;
+	font-size: 44dp;
+	font-weight: bold;
+	color: #ffd23a;
+	font-effect: outline(3dp #1a1200);
+}
+
+#stars {
+	position: absolute;
+	top: 80dp;
+	right: 26dp;
+	width: 190dp;
+	height: 34dp;
+}
+.star {
+	display: inline-block;
+	width: 26dp;
+	height: 26dp;
+	margin-left: 10dp;
+	transform: rotate(45deg);
+	background-color: #2a2a2a88;
+	border: 2dp #00000088;
+}
+.star.lit {
+	background-color: #3f7bff;
+	border: 2dp #d8e4ff;
+}
+
+#pager {
+	position: absolute;
+	top: 18dp;
+	left: 22dp;
+	width: 460dp;
+	padding: 10dp 14dp;
+	background-color: #0d2a12e0;
+	border: 3dp #3a3a3a;
+	border-radius: 6dp;
+	color: #6dff7a;
+	font-size: 17dp;
+	font-weight: bold;
+}
+
+#health {
+	position: absolute;
+	bottom: 28dp;
+	left: 24dp;
+	width: 240dp;
+}
+#health-bar {
+	height: 14dp;
+	background-color: #3a0f0f;
+	border: 2dp #000000;
+}
+#health-fill {
+	height: 100%;
+	background-color: #e03a3a;
+}
+#weapon {
+	margin-top: 8dp;
+	font-size: 22dp;
+	font-weight: bold;
+	color: #ffd23a;
+	font-effect: outline(2dp #1a1200);
+}
+
+#prompt {
+	position: absolute;
+	bottom: 90dp;
+	left: 0;
+	width: 100%;
+	text-align: center;
+	font-size: 22dp;
+	font-weight: bold;
+	color: #ffffff;
+	font-effect: outline(2dp #000000);
+}
+
+#vehicle {
+	position: absolute;
+	bottom: 26dp;
+	right: 26dp;
+	text-align: right;
+	font-size: 26dp;
+	font-weight: bold;
+	color: #ffffff;
+	font-effect: outline(2dp #000000);
+}
+#vehicle span {
+	color: #ffd23a;
+}
+
+#heist {
+	position: absolute;
+	top: 45%;
+	left: 35%;
+	width: 30%;
+	text-align: center;
+	font-weight: bold;
+	font-effect: outline(2dp #000000);
+}
+#heist-bar {
+	margin-top: 6dp;
+	height: 18dp;
+	background-color: #1a1a1a;
+	border: 2dp #ffd23a;
+}
+#heist-fill {
+	height: 100%;
+	background-color: #4ade50;
+}
+
+#big-text {
+	position: absolute;
+	top: 36%;
+	left: 0;
+	width: 100%;
+	text-align: center;
+	font-size: 110dp;
+	font-weight: bold;
+	color: #d42020;
+	font-effect: outline(5dp #000000);
+}
+#big-sub {
+	position: absolute;
+	top: 56%;
+	left: 0;
+	width: 100%;
+	text-align: center;
+	font-size: 26dp;
+	font-weight: bold;
+	color: #ffffff;
+	font-effect: outline(2dp #000000);
+}
+
+/* ---------- menu ---------- */
+
+#menu {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: #000000a8;
+}
+#title {
+	margin-top: 12%;
+	text-align: center;
+	font-size: 120dp;
+	font-weight: bold;
+	color: #ffd23a;
+	font-effect: outline(6dp #3a2400);
+}
+#tagline {
+	text-align: center;
+	font-size: 22dp;
+	color: #e8e8e8;
+	margin-bottom: 40dp;
+}
+.button {
+	width: 320dp;
+	margin: 12dp auto;
+	padding: 14dp 0;
+	text-align: center;
+	font-size: 28dp;
+	font-weight: bold;
+	color: #111111;
+	background-color: #ffd23a;
+	border: 3dp #3a2400;
+	border-radius: 4dp;
+}
+.button:hover {
+	background-color: #ffffff;
+}
+#controls {
+	margin: 36dp auto 0 auto;
+	width: 640dp;
+	text-align: center;
+	font-size: 16dp;
+	color: #c8c8c8;
+	line-height: 26dp;
+}
+#stats-line {
+	margin-top: 22dp;
+	text-align: center;
+	font-size: 15dp;
+	color: #9fe39f;
+}

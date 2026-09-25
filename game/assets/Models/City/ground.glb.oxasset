@@ -1,0 +1,43 @@
+{
+  "uuid": "960f462b-9595-4bf4-b916-79b565997a33",
+  "type": 2,
+  "source_hash": "3532D39590EA6F83",
+  "textures": [],
+  "materials": [
+    {
+      "uuid": "14d2bc44-b87c-41fe-b306-5da6dfd91a9d",
+      "sampling_mode": 0,
+      "albedo_color": {
+        "x": 0.152926,
+        "y": 0.102242,
+        "z": 0.0528606,
+        "w": 1
+      },
+      "uv_size": {
+        "x": 1,
+        "y": 1
+      },
+      "uv_offset": {
+        "x": 0,
+        "y": 0
+      },
+      "emissive_color": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "roughness_factor": 1,
+      "metallic_factor": 0,
+      "normal_scale": 1,
+      "occlusion_strength": 1,
+      "alpha_mode": 0,
+      "alpha_cutoff": 0.5,
+      "flip_normal_y": false,
+      "albedo_texture": "00000000-0000-0000-0000-000000000000",
+      "normal_texture": "00000000-0000-0000-0000-000000000000",
+      "emissive_texture": "00000000-0000-0000-0000-000000000000",
+      "metallic_roughness_texture": "00000000-0000-0000-0000-000000000000",
+      "occlusion_texture": "00000000-0000-0000-0000-000000000000"
+    }
+  ]
+}
