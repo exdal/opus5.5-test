@@ -32,6 +32,8 @@ miniaudio and asset cooking. It ran headless on llvmpipe with 4 CPU cores.
 | B17 | Low | `Camera::get_screen_ray` returns a ray whose direction points **back at the camera**. It unprojects NDC z=0 as "near" and z=1 as "far", but the engine's projection is reversed-z, so those are swapped. Anything that walks the ray forward from its origin (picking, `t > 0` tests) misses. The Lua binding `get_screen_ray_from_camera` inherits it. | `Render/Camera.cpp` | worked around (OxCity solves for the line, sign-agnostic) |
 | B18 | Medium | Destroyed meshes leave their **shadow baked into the VSM**: page invalidation only runs for moved/added instances. Every bullet tracer left a shadow on the street. | RMVSM invalidation | **fixed locally** (patch 13) |
 | B19 | Low | `~Texture` on a never-created texture calls `App::get_rendercontext()`, so `ParticleSystem` (or anything holding a `Texture`) can't be destroyed without a running renderer. | `Texture::destroy` | **fixed locally** (patch 12) |
+| B20 | Medium | **A particle system that can't be read silently becomes the default one**, which loops at 32/s forever. `load_particle_system` falls back to `ParticleSystem::make_default()` when the file is missing, logs one error, and the game gets white dots that never stop. Fine for the editor's "new asset", wrong for a shipped asset. | `AssetManager::load_particle_system` | worked around (the game checks spawn_rate). Suggest failing the load |
+| B21 | Medium | **The cooker registers `.oxparticle` (and audio) in the manifest by source path but doesn't pack or install them**, so a game has to know to copy them next to the binary with `ox.install_resources`. Nothing warns when a registered file is missing at runtime until something loads it. | `ox.cook_assets` rule | worked around (install rule). Suggest the cooker packs them, or installs what it registers |
 | B11 | Cosmetic | First run logs `ERR File error: Unknown, Path: context_config.toml`. A missing config on first launch is normal, it shouldn't be an error. | `ContextCVar::load` | noted |
 
 ## Missing features / API friction (ranked)
@@ -80,7 +82,17 @@ miniaudio and asset cooking. It ran headless on llvmpipe with 4 CPU cores.
     police car that comes and goes) would be read from disk and re-uploaded every time. A game has to
     know to call `load_asset` once at startup and `unload_asset` at shutdown to pin it, and nothing
     documents that. A `Scene::preload(uuid)` or an `AssetHandle` RAII type would say it in the API.
-11. **`Scene` exposes Jolt in its public header** (`Scene.hpp` includes six Jolt headers). AGENTS.md
+11. **The particle system is powerful but only reachable through the editor.** The node graph compiled
+    to bytecode is a good design, and the VM is fast and easy to read. But there's no way to author a
+    system in code except building `ParticleGraph`s by hand (as OxCity does in `ParticleAssets.cpp`), and
+    the file format stores node types as raw enum integers, so it can't be written by anything but C++.
+    Small helpers would make it a pleasure: named node types in JSON, a `ParticleGraphBuilder`, and a
+    "burst only" preset. Also: `Random` is per component, so `direction * Random(a, b)` (the default
+    graph's own pattern) skews the direction as well as the speed.
+12. **Particles are depth tested against the scene**, which is right, but it means a burst emitted at
+    an object's centre (an explosion inside a car) is invisible until it leaves the mesh. Worth a line
+    in the docs, or an option to test against the depth *before* the emitter's own entity.
+13. **`Scene` exposes Jolt in its public header** (`Scene.hpp` includes six Jolt headers). AGENTS.md
     already calls this debt, and I agree: every game TU pays for it.
 
 ## Things that were genuinely good

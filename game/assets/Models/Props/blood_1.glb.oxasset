@@ -1,7 +1,7 @@
 {
   "uuid": "500d2b96-2067-4f41-ab3a-ba30838d9517",
   "type": 2,
-  "source_hash": "3F49591D3F8C3E8D",
+  "source_hash": "0C1F807C046BBA47",
   "textures": [
     {
       "uuid": "c24cc845-7c28-4f40-b47f-35638be84ce5",
@@ -15,9 +15,9 @@
       "uuid": "66f0648f-5fb0-405a-a84b-d07d09b1b57a",
       "sampling_mode": 0,
       "albedo_color": {
-        "x": 0.102242,
-        "y": 0.00121411,
-        "z": 0.00121411,
+        "x": 0.270498,
+        "y": 0.00303527,
+        "z": 0.00303527,
         "w": 1
       },
       "uv_size": {
@@ -33,7 +33,7 @@
         "y": 0,
         "z": 0
       },
-      "roughness_factor": 0.25,
+      "roughness_factor": 0.2,
       "metallic_factor": 0,
       "normal_scale": 1,
       "occlusion_strength": 1,

@@ -133,16 +133,16 @@ auto blood_spray(const ox::UUID& material) -> ox::ParticleSystem {
   system.curves.push_back({.name = "Size", .points = {{0.0f, 1.0f}, {0.7f, 0.8f}, {1.0f, 0.35f}}});
   system.gradients.push_back({
     .name = "Blood",
-    .keys = {{0.0f, {0.55f, 0.015f, 0.01f, 1.0f}}, {0.6f, {0.4f, 0.0f, 0.0f, 1.0f}}, {1.0f, {0.25f, 0.0f, 0.0f, 0.0f}}},
+    .keys = {{0.0f, {0.75f, 0.02f, 0.02f, 1.0f}}, {0.6f, {0.55f, 0.0f, 0.0f, 1.0f}}, {1.0f, {0.35f, 0.0f, 0.0f, 0.0f}}},
   });
-  add_common_spawn(system, 1.2f, 4.0f, 0.1f);
-  add_common_update(system, 14.0f, 0.12f);
+  add_common_spawn(system, 1.2f, 4.0f, 0.18f);
+  add_common_update(system, 14.0f, 0.2f);
   return system;
 }
 
 auto muzzle_flash(const ox::UUID& material) -> ox::ParticleSystem {
   auto system = ox::ParticleSystem{};
-  burst_emitter(system, 256, {0.05f, 0.09f}, ox::ParticleEmissionShape::Sphere, 0.05f);
+  burst_emitter(system, 256, {0.08f, 0.13f}, ox::ParticleEmissionShape::Sphere, 0.05f);
   system.render.material = material;
   system.render.billboard = ox::ParticleBillboardMode::FaceCamera;
   system.render.blend = ox::ParticleBlendMode::Additive;
@@ -154,8 +154,8 @@ auto muzzle_flash(const ox::UUID& material) -> ox::ParticleSystem {
     .name = "Flash",
     .keys = {{0.0f, {6.0f, 4.5f, 1.6f, 1.0f}}, {1.0f, {3.0f, 1.0f, 0.2f, 0.0f}}},
   });
-  add_common_spawn(system, 0.2f, 1.2f, 0.35f);
-  add_common_update(system, 0.0f, 0.4f);
+  add_common_spawn(system, 0.2f, 1.2f, 0.6f);
+  add_common_update(system, 0.0f, 0.7f);
   return system;
 }
 
@@ -195,8 +195,8 @@ auto explosion(const ox::UUID& material) -> ox::ParticleSystem {
              {0.7f, {1.2f, 0.25f, 0.02f, 0.6f}},
              {1.0f, {0.2f, 0.05f, 0.0f, 0.0f}}},
   });
-  add_common_spawn(system, 3.0f, 9.0f, 1.0f);
-  add_common_update(system, -2.0f, 1.8f, 3.5f);
+  add_common_spawn(system, 3.0f, 9.0f, 1.6f);
+  add_common_update(system, -2.0f, 2.8f, 3.5f);
   return system;
 }
 
@@ -216,8 +216,8 @@ auto smoke(const ox::UUID& material) -> ox::ParticleSystem {
              {0.1f, {0.06f, 0.055f, 0.05f, 0.75f}},
              {1.0f, {0.18f, 0.18f, 0.18f, 0.0f}}},
   });
-  add_common_spawn(system, 0.2f, 0.8f, 0.8f);
-  add_common_update(system, -1.6f, 1.6f, 0.8f);
+  add_common_spawn(system, 0.2f, 0.8f, 1.2f);
+  add_common_update(system, -1.6f, 2.4f, 0.8f);
   return system;
 }
 

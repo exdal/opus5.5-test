@@ -262,3 +262,48 @@ over 3 ms, and gives each sound its own peak level. Measured on the old and new 
 centroid roughly halved (pager 3.4 kHz → 1.4 kHz, gunshot 3.9 kHz → 1.4 kHz) and the loud ones are
 5–11 dB quieter. Nothing about this is engine-specific; I hadn't listened with headphones, and
 headless I can't listen at all, so I measured instead.
+
+## Day 2: particles, blood and a settings menu
+
+The project owner asked for the engine's particle system ("it's node based but it provides bytecode,
+not sure how you're gonna handle that"). The bytecode part is the engine's job: `ParticleSystem`
+holds three node graphs (emitter, spawn, update) and `compile_particle_graphs` turns them into a small
+register-VM program when the asset loads. The interesting part was authoring without the editor.
+OxCity builds the graphs with the same `ParticleGraph` API the editor's canvas uses, and
+`OxCity --write-particles game/assets/Particles` saves them with `ParticleSystem::write`. The JSON
+stores node types as raw enum values, so a Python generator (like the models and sounds use) would
+break silently the day that enum is reordered.
+
+Two things went wrong on the way:
+- The first tool run segfaulted in `~Texture`: an empty texture still asked for the render context
+  (patch 12).
+- The first version the owner played showed "default particles that never disappear". The cooker had
+  registered my `.oxparticle` files in the manifest, but nothing installed them next to the binary.
+  Every load failed, and the engine quietly substituted its default system, which loops forever
+  (B20, B21). One line in `game/xmake.lua` fixed it, and `init_fx` now refuses a system that comes
+  back looking like the default.
+
+Effects now in the game, all burst-only emitters fired from small pools:
+- **Blood:** a spray on every hit. Kills leave a pool plus a directional spatter decal thrown along the
+  hit and stretched with its force. Wounded peds leave a trail.
+- **Guns and cars:** muzzle flashes, sparks off walls and cars, shell casings bouncing off the
+  pavement, tyre smoke when sliding, grey smoke from damaged cars and black smoke from wrecks.
+- **Explosions:** a fireball, smoke, debris, a scorch mark, a short point-light flash and chain
+  reactions.
+- **Heist and pickups:** drill sparks at the vault, a cash sparkle on pickup.
+
+One lesson from the first headless screenshots: particles are depth tested against the scene, so a
+fireball emitted at the centre of a car stays hidden inside it. Emit above the roof.
+
+The kill feedback leans on RmlUi: a full-screen red flash bound to a float, and a "3X COMBO" whose
+`transform` is a data expression (`'rotate(' + combo_tilt + 'deg) scale(' + combo_scale + ')'`), which
+RmlUi handled without complaint. Hit-stop is done game-side by stepping the scene with 5% of the frame
+time; a delta of exactly zero would make flecs measure its own frame time. The settings panel (sound
+effects and music on/off, saved to `oxcity_settings.txt`) is plain RmlUi data binding plus two event
+callbacks. The menu got a short synthwave theme, so the music toggle has something to switch off
+outside the car.
+
+One more engine bug came from the owner: every bullet tracer left its shadow behind. RMVSM caches
+shadow pages and only invalidated pages for moved or added meshes, never for removed ones (patch 13).
+`docs/screenshots/vsm_ghost_shadow_{unpatched,patched}.png` show a van-shaped ghost shadow and the
+clean road after the fix, from the same scripted run with the new pass switched off and on.

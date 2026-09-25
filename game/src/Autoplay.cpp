@@ -398,12 +398,34 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
       if (at(3.4f) && self.target_car != CarID::Invalid) {
         world.damage_car(self.target_car, 500.0f, true);
       }
-      if (at(3.55f)) {
+      if (at(3.5f)) {
         self.screenshot("explosion");
       }
       if (at(6.0f)) {
         self.screenshot("aftermath");
         self.next(fmt::format("kills {}, combo score {}", world.stats.peds_killed, world.juice.score));
+      }
+      break;
+    }
+    case 22: { // settings panel: open it from the pause menu, turn sound effects off, check it's saved
+      if (at(0.5f)) {
+        world.set_state(GameState::Paused);
+        world.hud.settings_open = true;
+        world.hud.sfx_on = false;
+        world.save_settings();
+      }
+      if (at(1.0f)) {
+        self.screenshot("settings");
+      }
+      if (at(1.5f)) {
+        world.hud.sfx_on = !world.hud.sfx_on;
+        world.load_settings(); // back from the file: must still say off
+        const auto saved_off = !world.hud.sfx_on;
+        world.hud.sfx_on = true;
+        world.save_settings();
+        world.hud.settings_open = false;
+        world.set_state(GameState::Playing);
+        self.next(saved_off ? "settings: sound effects off, saved and read back" : "settings: the saved value didn't come back");
       }
       break;
     }

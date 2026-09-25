@@ -182,8 +182,8 @@ def blood_streak_texture(seed: int, width: int = 256, height: int = 128) -> byte
     ellipses = []  # (cu, cv, ru, rv) in uv space, axis aligned with the throw
 
     # the pool: a few overlapping lumps near the start
-    for _ in range(6):
-        ellipses.append((rng.uniform(0.05, 0.16), 0.5 + rng.gauss(0.0, 0.05), rng.uniform(0.04, 0.08), rng.uniform(0.1, 0.2)))
+    for _ in range(7):
+        ellipses.append((rng.uniform(0.05, 0.2), 0.5 + rng.gauss(0.0, 0.06), rng.uniform(0.05, 0.1), rng.uniform(0.14, 0.26)))
 
     # streaks: runs of shrinking lumps, each fanned out a little from the centre line
     for _ in range(rng.randint(5, 8)):
@@ -194,16 +194,16 @@ def blood_streak_texture(seed: int, width: int = 256, height: int = 128) -> byte
             t = k / steps
             u = 0.12 + t * length
             v = 0.5 + math.tan(angle) * (u - 0.1) * aspect * 0.5
-            thickness = (1.0 - t) ** 1.4 * 0.045 + 0.008
+            thickness = (1.0 - t) ** 1.2 * 0.08 + 0.016
             ellipses.append((u, v, 0.018, thickness))
 
     # droplets: thrown in a widening cone, stretched along the throw, some with a thin tail pointing back
-    for _ in range(rng.randint(70, 110)):
+    for _ in range(rng.randint(60, 85)):
         t = rng.random() ** 0.7
         u = 0.15 + t * 0.83
         spread = 0.06 + t * 0.32
         v = 0.5 + rng.gauss(0.0, spread * 0.5)
-        r = (1.0 - t) * 0.035 + 0.006 + rng.uniform(0.0, 0.01)
+        r = (1.0 - t) * 0.05 + 0.014 + rng.uniform(0.0, 0.015)
         stretch = 1.0 + t * rng.uniform(1.0, 3.0)
         ellipses.append((u, v, r * stretch / aspect, r))
         if rng.random() < 0.35:
@@ -842,7 +842,7 @@ def fx() -> Node:
 def blood(variant: int) -> Node:
     """a flat 1x1 m splat lying on the ground, alpha masked. Glossy, it's wet"""
     root = Node(f"blood_{variant}")
-    m = Mat(f"blood_{variant}", srgb("#5a0404"), roughness=0.25, texture=f"blood_splat_{variant}", alpha_mode="MASK")
+    m = Mat(f"blood_{variant}", srgb("#8e0a0a"), roughness=0.2, texture=f"blood_splat_{variant}", alpha_mode="MASK")
     g = Geo()
     g.quad((-0.5, 0.0, 0.5), (0.5, 0.0, 0.5), (0.5, 0.0, -0.5), (-0.5, 0.0, -0.5), (0, 1, 0))
     root.add(g, m)
@@ -853,7 +853,7 @@ def blood_streak(variant: int) -> Node:
     """directional spatter: 1 m wide, 2 m long, starting at the origin and thrown along +z. The game yaws it to the
     hit direction and stretches it with the force of the hit"""
     root = Node(f"blood_streak_{variant}")
-    m = Mat(f"blood_streak_{variant}", srgb("#5a0404"), roughness=0.25, texture=f"blood_streak_{variant}", alpha_mode="MASK")
+    m = Mat(f"blood_streak_{variant}", srgb("#8e0a0a"), roughness=0.2, texture=f"blood_streak_{variant}", alpha_mode="MASK")
     g = Geo()
     # u runs along +z so the texture's throw lines up with the model's forward
     g.quad((-0.5, 0.0, 0.0), (-0.5, 0.0, 2.0), (0.5, 0.0, 2.0), (0.5, 0.0, 0.0), (0, 1, 0))

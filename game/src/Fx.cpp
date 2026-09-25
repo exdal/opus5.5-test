@@ -172,12 +172,13 @@ auto World::impact_sparks(this World& self, glm::vec3 position, glm::vec2 direct
 }
 
 auto World::explode(this World& self, glm::vec2 position, bool by_player) -> void {
-  const auto at = to3(position, 0.9f);
-  self.emit(self.fx_explosion, at, glm::vec3(0.0f, 2.0f, 0.0f), 70);
-  self.emit(self.fx_smoke, at, glm::vec3(0.0f, 1.5f, 0.0f), 40);
-  self.emit(self.fx_sparks, at, glm::vec3(0.0f, 3.0f, 0.0f), 60);
+  // above the roof: particles are depth tested against the scene, emitted inside the car body they'd stay hidden
+  const auto at = to3(position, 2.2f);
+  self.emit(self.fx_explosion, at, glm::vec3(0.0f, 2.0f, 0.0f), 120);
+  self.emit(self.fx_smoke, at, glm::vec3(0.0f, 1.5f, 0.0f), 50);
+  self.emit(self.fx_sparks, at, glm::vec3(0.0f, 3.0f, 0.0f), 80);
   {
-    const auto size = self.random_float(4.0f, 5.5f);
+    const auto size = self.random_float(6.5f, 8.0f);
     self.place_decal(self.assets.scorch_decals[static_cast<usize>(self.random_int(0, 1))], position,
                      self.random_float(0.0f, glm::two_pi<f32>()), glm::vec3(size, 1.0f, size));
   }
@@ -251,7 +252,7 @@ auto World::update_car_fx(this World& self, f32 dt) -> void {
         // the engine bay: black and thick once wrecked, grey while it still runs
         const auto hood = pos + fwd * 1.3f;
         c.smoke_timer = c.exploded ? 0.12f : 0.3f;
-        self.emit(self.fx_smoke, to3(hood, 1.0f), glm::vec3(0.0f, 1.0f, 0.0f), c.exploded ? 3 : 1);
+        self.emit(self.fx_smoke, to3(hood, 1.7f), glm::vec3(0.0f, 1.0f, 0.0f), c.exploded ? 3 : 1);
       }
     }
 
@@ -276,7 +277,7 @@ auto World::on_kill(this World& self, glm::vec2 position, glm::vec2 direction, b
   self.blood_burst(position, direction, big ? 180 : 130);
   // a pool where they drop, and the spatter thrown out behind them along the hit, longer for harder hits
   self.blood_decal(position, self.random_float(1.1f, 1.7f) * (big ? 1.3f : 1.0f));
-  self.blood_streak(position, direction, self.random_float(2.8f, 4.2f) * (big ? 1.6f : 1.0f), self.random_float(1.3f, 1.9f));
+  self.blood_streak(position, direction, self.random_float(3.5f, 5.5f) * (big ? 1.5f : 1.0f), self.random_float(1.6f, 2.4f));
   if (big) {
     // run over or blown up: it goes everywhere
     for (auto k = 0; k < 2; k++) {
