@@ -1,0 +1,179 @@
+import common;
+import gpu;
+import debug_drawer;
+
+public struct ScreenAabb {
+    public f32x3 min;
+    public f32x3 max;
+}
+
+// Credits:
+// - https://zeux.io/2023/01/12/approximate-projected-bounds
+public func project_aabb(f32x4x4 mvp, f32 near, f32x3 aabb_center, f32x3 aabb_extent) -> Optional<ScreenAabb> {
+    let SX = mul(mvp, f32x4(aabb_extent.x, 0.0, 0.0, 0.0));
+    let SY = mul(mvp, f32x4(0.0, aabb_extent.y, 0.0, 0.0));
+    let SZ = mul(mvp, f32x4(0.0, 0.0, aabb_extent.z, 0.0));
+
+    let P0 = mul(mvp, f32x4(aabb_center - aabb_extent * 0.5, 1.0));
+    let P1 = P0 + SZ;
+    let P2 = P0 + SY;
+    let P3 = P2 + SZ;
+    let P4 = P0 + SX;
+    let P5 = P4 + SZ;
+    let P6 = P4 + SY;
+    let P7 = P6 + SZ;
+
+    let depth = min(P0, min(P1, min(P2, min(P3, min(P4, min(P5, min(P6, P7))))))).w;
+    if (depth < near) {
+        return none;
+    }
+
+    let DP0 = P0.xyz / P0.w;
+    let DP1 = P1.xyz / P1.w;
+    let DP2 = P2.xyz / P2.w;
+    let DP3 = P3.xyz / P3.w;
+    let DP4 = P4.xyz / P4.w;
+    let DP5 = P5.xyz / P5.w;
+    let DP6 = P6.xyz / P6.w;
+    let DP7 = P7.xyz / P7.w;
+    let vmin = min(DP0, min(DP1, min(DP2, min(DP3, min(DP4, min(DP5, min(DP6, DP7)))))));
+    let vmax = max(DP0, max(DP1, max(DP2, max(DP3, max(DP4, max(DP5, max(DP6, DP7)))))));
+
+    var vaabb = f32x4(vmin.xy, vmax.xy);
+    // clip to uv space
+    vaabb = vaabb * 0.5 + 0.5;
+    ScreenAabb ret = { f32x3(vaabb.xy, vmin.z), f32x3(vaabb.zw, vmax.z) };
+    return ret;
+}
+
+func normalize_plane(f32x4 p) -> f32x4 {
+    return p / length(p.xyz);
+}
+
+// Credits:
+// - https://github.com/SparkyPotato/radiance/blob/eaf18b3bbf4942234fa929ef6ad5e04e3c45fc62/shaders/passes/mesh/cull.slang#L340
+// - https://fgiesen.wordpress.com/2012/08/31/frustum-planes-from-the-projection-matrix/
+// - https://fgiesen.wordpress.com/2010/10/17/view-frustum-culling/
+public func test_frustum(in f32x4x4 mvp, in f32x3 aabb_center, in f32x3 aabb_extent) -> bool {
+    f32x4 planes[] = {
+        // Left
+        normalize_plane(mvp[3] + mvp[0]),
+        // Right
+        normalize_plane(mvp[3] - mvp[0]),
+        // Bottom
+        normalize_plane(mvp[3] + mvp[1]),
+        // Top
+        normalize_plane(mvp[3] - mvp[1]),
+        // Near
+        normalize_plane(mvp[2]),
+        // Far
+        normalize_plane(mvp[3] - mvp[2])
+    };
+
+    let aabb_half_extent = aabb_extent * 0.5;
+    [[unroll]]
+    for (uint i = 0; i < planes.getCount(); i++) {
+        let flip = asuint(planes[i].xyz) & 0x80000000;
+        let sign_flipped = asfloat(asuint(aabb_half_extent) ^ flip);
+        if (dot(aabb_center + sign_flipped, planes[i].xyz) <= -planes[i].w) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+public func sample_level_min_reduction_2x2(
+    in Image2D<f32> img,
+    in f32x2 uv,
+    in u32 mip_level
+) -> f32 {
+    var mip_w = 0u;
+    var mip_h = 0u;
+    var levels = 0u;
+    img.GetDimensions(mip_level, mip_w, mip_h, levels);
+    let mip_size = f32x2(f32(mip_w), f32(mip_h));
+    let max_c = i32x2(i32(mip_w) - 1, i32(mip_h) - 1);
+    let zero = i32x2(0, 0);
+
+    let base = i32x2(floor(uv * mip_size - 0.5));
+
+    let c00 = clamp(base,               zero, max_c);
+    let c10 = clamp(base + i32x2(1, 0), zero, max_c);
+    let c01 = clamp(base + i32x2(0, 1), zero, max_c);
+    let c11 = clamp(base + i32x2(1, 1), zero, max_c);
+
+    let p00 = img.Load(i32x3(c00, i32(mip_level))).r;
+    let p10 = img.Load(i32x3(c10, i32(mip_level))).r;
+    let p01 = img.Load(i32x3(c01, i32(mip_level))).r;
+    let p11 = img.Load(i32x3(c11, i32(mip_level))).r;
+
+    return min(min(p00, p10), min(p01, p11));
+}
+
+public func test_occlusion(
+    in ScreenAabb screen_aabb,
+    in Image2D<f32> hiz_image
+) -> bool {
+    var width = 0u;
+    var height = 0u;
+    var hiz_levels = 0u;
+    hiz_image.GetDimensions(0, width, height, hiz_levels);
+    let hiz_size = f32x2(width, height);
+
+    let min_texel = u32x2(max(screen_aabb.min.xy * hiz_size, 0.0));
+    let max_texel = u32x2(min(screen_aabb.max.xy * hiz_size, hiz_size - 1.0));
+
+    let size = max_texel - min_texel;
+    let max_size = max(size.x, size.y);
+    let mip = clamp(ceil(log2(f32(max_size))), 0.0, f32(hiz_levels - 1));
+
+    let uv = ((f32x2(min_texel) + f32x2(max_texel)) * 0.5f) / hiz_size;
+    let d = sample_level_min_reduction_2x2(hiz_image, uv, u32(mip));
+    constexpr static let EPSILON = 1e-7;
+    return screen_aabb.max.z <= d - EPSILON;
+}
+
+public func test_vsm_page(
+  in ScreenAabb screen_aabb,
+  in Texture2DArray<u8> hpb,
+  in SamplerState hpb_sampler,
+  in u32 layer,
+  in i32x2 page_offset
+) -> bool {
+    var width = 0u;
+    var height = 0u;
+    var elements = 0u;
+    var hpb_levels = 0u;
+    hpb.GetDimensions(0, width, height, elements, hpb_levels);
+    let hpb_size = f32x2(width, height);
+
+    let page_offset_uv = f32x2(page_offset) / hpb_size;
+
+    let min_uv = screen_aabb.min.xy;
+    let max_uv = screen_aabb.max.xy;
+
+    let box_w = (max_uv.x - min_uv.x) * hpb_size.x;
+    let box_h = (max_uv.y - min_uv.y) * hpb_size.y;
+    let mip = clamp(ceil(log2(max(box_w, box_h))), 0.0, f32(hpb_levels - 1));
+
+    let tl = hpb.SampleLevel(hpb_sampler, f32x3(fract(f32x2(min_uv.x, min_uv.y) + page_offset_uv), f32(layer)), mip) != 0;
+    let tr = hpb.SampleLevel(hpb_sampler, f32x3(fract(f32x2(max_uv.x, min_uv.y) + page_offset_uv), f32(layer)), mip) != 0;
+    let bl = hpb.SampleLevel(hpb_sampler, f32x3(fract(f32x2(min_uv.x, max_uv.y) + page_offset_uv), f32(layer)), mip) != 0;
+    let br = hpb.SampleLevel(hpb_sampler, f32x3(fract(f32x2(max_uv.x, max_uv.y) + page_offset_uv), f32(layer)), mip) != 0;
+
+    return tl | tr | bl | br;
+}
+
+// https://zeux.io/2023/04/28/triangle-backface-culling/#fnref:3
+public func test_triangle_backface(f32x4x3 clip_pos) -> bool {
+    return determinant(f32x3x3(clip_pos[0].xyw, clip_pos[1].xyw, clip_pos[2].xyw)) >= 0.0001;
+}
+
+public func test_cone(f32x3 center, f32 radius, f32x3 cone_axis, f32 cone_cutoff, f32x3 camera_position) -> bool {
+	return dot(center - camera_position, cone_axis) >= cone_cutoff * length(center - camera_position) + radius;
+}
+
+public func test_cone_directional(f32x3 cone_axis, f32 cone_cutoff, f32x3 view_dir) -> bool {
+    return dot(cone_axis, view_dir) >= cone_cutoff;
+}

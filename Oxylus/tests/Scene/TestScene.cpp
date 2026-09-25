@@ -1,0 +1,35 @@
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+#include "Core/App.hpp"
+#include "Scene/Scene.hpp"
+
+class SceneTest : public ::testing::Test {
+protected:
+  void SetUp() override {
+    loguru::g_stderr_verbosity = loguru::Verbosity_WARNING; // only stdout errors from oxylus
+
+    // app = create_test_app();
+    // scene = create_test_scene();
+  }
+
+  void TearDown() override {
+    // scene.reset();
+    // app.reset();
+  }
+
+  std::unique_ptr<ox::App> app = nullptr;
+  std::unique_ptr<ox::Scene> scene = nullptr;
+};
+
+#if 0
+TEST_F(SceneTest, DidRun) {
+  bool did_run = false;
+  scene->runtime_start();
+  did_run = scene->is_running();
+  scene->runtime_stop();
+
+  EXPECT_TRUE(did_run);
+}
+#endif
+

@@ -1,0 +1,47 @@
+#pragma once
+
+#include "Core/EventSystem.hpp"
+#include "Panels/EditorPanelState.hpp"
+#include "Panels/SceneHierarchyPanel.hpp"
+#include "ViewportPanel.hpp"
+
+namespace ox {
+class MainViewportPanel : public EditorPanelState {
+public:
+  MainViewportPanel();
+
+  auto init(this MainViewportPanel& self) -> void;
+  auto deinit(this MainViewportPanel& self) -> void;
+  auto reset(this MainViewportPanel& self) -> void;
+
+  auto get_focused_viewport(this const MainViewportPanel& self) -> ViewportPanel*;
+  auto get_visible_viwports(this const MainViewportPanel& self) -> std::vector<ViewportPanel*>;
+  auto is_any_scene_playing(this const MainViewportPanel& self) -> bool;
+  auto is_fullscreen(this const MainViewportPanel& self) -> bool;
+  auto toggle_fullscreen(this MainViewportPanel& self) -> void;
+
+  auto add_new_scene(this MainViewportPanel& self, const std::shared_ptr<EditorScene>& scene) -> void;
+  auto add_new_play_scene(this MainViewportPanel& self, const std::shared_ptr<EditorScene>& scene) -> void;
+  auto add_viewport(this MainViewportPanel& self) -> ViewportPanel*;
+
+  auto on_update(this MainViewportPanel& self) -> void {}
+  auto on_render(this MainViewportPanel& self, vuk::ImageAttachment swapchain_attachment) -> void;
+
+  void update(this MainViewportPanel& self, const Timestep& timestep, SceneHierarchyPanel* sh);
+
+  auto update_dockspace(this MainViewportPanel& self) -> void;
+  auto set_dockspace(this const MainViewportPanel& self) -> void;
+
+private:
+  std::vector<std::unique_ptr<ViewportPanel>> viewport_panels = {};
+  std::vector<std::unique_ptr<ViewportPanel>> pending_viewports = {};
+  HandlerId app_close_handler = {};
+  HandlerId scene_load_handler = {};
+  HandlerId scene_play_handler = {};
+  HandlerId scene_stop_handler = {};
+  bool dock_should_update = false;
+  bool fullscreen_viewport = false;
+
+  void drag_drop(this MainViewportPanel& self);
+};
+} // namespace ox

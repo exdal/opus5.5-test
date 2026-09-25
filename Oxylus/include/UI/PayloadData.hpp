@@ -1,0 +1,34 @@
+#pragma once
+
+#include <imgui.h>
+
+#include "Core/UUID.hpp"
+#include "Utils/Log.hpp"
+
+namespace ox {
+struct PayloadData {
+  static constexpr auto DRAG_DROP_TARGET = "DRAG_DROP_TARGET";
+  static constexpr auto DRAG_DROP_SOURCE = "DRAG_DROP_SOURCE";
+
+  char str[256] = {};
+  UUID uuid = {};
+
+  PayloadData(const std::string& s, const UUID& id = {}) {
+    OX_CHECK_LT(s.size(), sizeof(str), "String can't fit into payload");
+
+    std::strncpy(str, s.c_str(), sizeof(str));
+    str[sizeof(str) - 1] = '\0'; // null-termination
+    uuid = id;
+  }
+
+  auto size() const -> usize { return sizeof(PayloadData); }
+
+  auto get_str() const -> std::string { return std::string(str); }
+  auto get_path() const -> std::filesystem::path { return std::filesystem::path(str); }
+
+  static auto from_payload(const ImGuiPayload* payload) -> const PayloadData* {
+    return reinterpret_cast<const PayloadData*>(payload->Data);
+  }
+};
+
+} // namespace ox

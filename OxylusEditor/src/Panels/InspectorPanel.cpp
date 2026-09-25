@@ -1,0 +1,1020 @@
+#include "InspectorPanel.hpp"
+
+#include <icons/IconsMaterialDesignIcons.h>
+#include <imgui.h>
+#include <imgui_internal.h>
+#include <misc/cpp/imgui_stdlib.h>
+
+#include "Asset/AssetFile.hpp"
+#include "Asset/AssetImporter.hpp"
+#include "Asset/AssetManager.hpp"
+#include "Asset/AssetMeta.hpp"
+#include "Audio/AudioEngine.hpp"
+#include "Core/App.hpp"
+#include "Core/EventSystem.hpp"
+#include "Editor.hpp"
+#include "Memory/Stack.hpp"
+#include "ParticleEditorPanel.hpp"
+#include "Scene/EntitySerializer.hpp"
+#include "UI/ImGuiRenderer.hpp"
+#include "UI/PayloadData.hpp"
+#include "UI/UI.hpp"
+#include "Utils/EditorTheme.hpp"
+
+namespace ox {
+static UUID pending_save_material_uuid = {};
+
+// Components only carry a UUID, and nothing in the reflection says which kind of asset a field
+// points at, so an empty field is matched by the name the component gave it. A field that already
+// holds something uses the type of what it holds instead.
+static auto expected_asset_type(const std::string_view field_name) -> AssetType {
+  const auto has = [field_name](const std::string_view needle) {
+    return field_name.find(needle) != std::string_view::npos;
+  };
+
+  if (has("model"))
+    return AssetType::Model;
+  if (has("material"))
+    return AssetType::Material;
+  if (has("texture") || has("layer_"))
+    return AssetType::Texture;
+  if (has("audio") || has("sound"))
+    return AssetType::Audio;
+  if (has("particle"))
+    return AssetType::ParticleSystem;
+  if (has("terrain"))
+    return AssetType::Terrain;
+  if (has("script"))
+    return AssetType::Script;
+  if (has("scene") || has("prefab"))
+    return AssetType::Scene;
+
+  return AssetType::None;
+}
+
+static auto format_timestamp(memory::ScopedStack& stack, const f32 seconds) -> const c8* {
+  const auto total = static_cast<i32>(seconds);
+
+  return stack.format_char("{}:{:02}", total / 60, total % 60);
+}
+
+struct EntityInspector : IEntitySerializer {
+  UndoRedoSystem& undo_redo_system;
+  InspectorPanel& inspector_panel;
+  bool modified;
+
+  EntityInspector(flecs::world& world_, UndoRedoSystem& undo_redo_system_, InspectorPanel& inspector_panel_)
+      : IEntitySerializer(world_),
+        undo_redo_system(undo_redo_system_),
+        inspector_panel(inspector_panel_),
+        modified(false) {}
+
+  auto on_primitive(std::string_view name, Primitive primitive) -> void override {
+    std::visit(
+      ox::match{
+        [](const auto&) {},
+        [&](bool* v) {
+          auto old_v = *v;
+          if (UI::property(name.data(), v)) {
+            undo_redo_system //
+              .set_merge_enabled(false)
+              .execute_command<PropertyChangeCommand<bool>>(v, old_v, *v, std::string(name))
+              .set_merge_enabled(true);
+            modified = true;
+          }
+        },
+        [&](c8* v) {
+          auto old_v = *v;
+          if (UI::property(name.data(), v)) {
+            undo_redo_system.execute_command<PropertyChangeCommand<c8>>(v, old_v, *v, std::string(name));
+            modified = true;
+          }
+        },
+        [&](i8* v) {
+          auto old_v = *v;
+          if (UI::property(name.data(), v)) {
+            undo_redo_system.execute_command<PropertyChangeCommand<i8>>(v, old_v, *v, std::string(name));
+            modified = true;
+          }
+        },
+        [&](u8* v) {
+          auto old_v = *v;
+          if (UI::property(name.data(), v)) {
+            undo_redo_system.execute_command<PropertyChangeCommand<u8>>(v, old_v, *v, std::string(name));
+            modified = true;
+          }
+        },
+        [&](i16* v) {
+          auto old_v = *v;
+          if (UI::property(name.data(), v)) {
+            undo_redo_system.execute_command<PropertyChangeCommand<i16>>(v, old_v, *v, std::string(name));
+            modified = true;
+          }
+        },
+        [&](u16* v) {
+          auto old_v = *v;
+          if (UI::property(name.data(), v)) {
+            undo_redo_system.execute_command<PropertyChangeCommand<u16>>(v, old_v, *v, std::string(name));
+            modified = true;
+          }
+        },
+        [&](i32* v) {
+          auto old_v = *v;
+          if (UI::property(name.data(), v)) {
+            undo_redo_system.execute_command<PropertyChangeCommand<i32>>(v, old_v, *v, std::string(name));
+            modified = true;
+          }
+        },
+        [&](u32* v) {
+          auto old_v = *v;
+          if (UI::property(name.data(), v)) {
+            undo_redo_system.execute_command<PropertyChangeCommand<u32>>(v, old_v, *v, std::string(name));
+            modified = true;
+          }
+        },
+        [&](i64* v) {
+          auto old_v = *v;
+          if (UI::property(name.data(), v)) {
+            undo_redo_system.execute_command<PropertyChangeCommand<i64>>(v, old_v, *v, std::string(name));
+            modified = true;
+          }
+        },
+        [&](u64* v) {
+          auto old_v = *v;
+          if (UI::property(name.data(), v)) {
+            undo_redo_system.execute_command<PropertyChangeCommand<u64>>(v, old_v, *v, std::string(name));
+            modified = true;
+          }
+        },
+        [&](f32* v) {
+          auto old_v = *v;
+          if (UI::property(name.data(), v)) {
+            undo_redo_system.execute_command<PropertyChangeCommand<f32>>(v, old_v, *v, std::string(name));
+            modified = true;
+          }
+        },
+        [&](f64* v) {
+          auto old_v = *v;
+          if (UI::property(name.data(), v)) {
+            undo_redo_system.execute_command<PropertyChangeCommand<f64>>(v, old_v, *v, std::string(name));
+            modified = true;
+          }
+        },
+      },
+      primitive
+    );
+  }
+
+  auto on_string(std::string_view name, const c8** str) -> void override {}
+
+  auto on_enum(std::string_view name, ecs_meta_op_kind_t underlying_kind, flecs::entity_t type, void* ptr)
+    -> void override {
+    UI::begin_property_grid(name.data(), nullptr);
+
+    auto field_names = std::vector<const char*>{};
+    world.entity(type).children([&](flecs::entity e) { field_names.push_back(e.name()); });
+    auto current = static_cast<i32*>(ptr);
+    ImGui::Combo("##enum_field", current, field_names.data(), static_cast<int>(field_names.size()));
+    UI::end_property_grid();
+  }
+
+  auto on_entity(std::string_view name, flecs::entity* entity) -> void override {}
+
+  auto on_component(std::string_view name, flecs::id_t* component) -> void override {}
+
+  auto on_struct(std::string_view name, flecs::meta::op_t* ops, i32 op_count, void* base) -> void override {
+    if (!name.empty()) {
+      if (ops->type == world.entity<glm::vec2>()) {
+        auto* v = static_cast<glm::vec2*>(base);
+        auto old_v = *v;
+        if (UI::draw_vec2_control(name.data(), *v)) {
+          undo_redo_system.execute_command<PropertyChangeCommand<glm::vec2>>(v, old_v, *v, std::string(name));
+          modified = true;
+        }
+      } else if (ops->type == world.entity<glm::vec3>()) {
+        auto* v = static_cast<glm::vec3*>(base);
+        auto old_v = *v;
+        if (UI::draw_vec3_control(name.data(), *v)) {
+          undo_redo_system.execute_command<PropertyChangeCommand<glm::vec3>>(v, old_v, *v, std::string(name));
+          modified = true;
+        }
+      } else if (ops->type == world.entity<glm::vec4>()) {
+        auto* v = static_cast<glm::vec4*>(base);
+        auto old_v = *v;
+        if (UI::property_vector(name.data(), *v)) {
+          undo_redo_system.execute_command<PropertyChangeCommand<glm::vec4>>(v, old_v, *v, std::string(name));
+          modified = true;
+        }
+      } else if (ops->type == world.entity<glm::quat>()) {
+        auto* v = static_cast<glm::quat*>(base);
+
+        if (!inspector_panel.euler_cache.has_value()) {
+          inspector_panel.euler_cache = glm::degrees(glm::eulerAngles(*v));
+        }
+
+        auto old_v = *v;
+        if (UI::draw_vec3_control(name.data(), *inspector_panel.euler_cache)) {
+          auto old_v_cmd = *v;
+          *v = glm::quat(glm::radians(inspector_panel.euler_cache.value()));
+          undo_redo_system.execute_command<PropertyChangeCommand<glm::quat>>(v, old_v_cmd, *v, std::string(name));
+
+          modified = true;
+        }
+      } else {
+        serialize_ops(ops + 1, op_count - 1, base);
+      }
+    } else {
+      // root level serialization
+      serialize_ops(ops + 1, op_count - 1, base);
+    }
+  }
+
+  auto on_opaque_value(
+    std::string_view name, flecs::entity_t field_type, void* field_ptr, flecs::entity_t opaque_type, const void* value
+  ) -> void override {
+    if (field_type != world.entity<UUID>()) {
+      return;
+    }
+
+    auto* uuid = static_cast<UUID*>(field_ptr);
+
+    // The asset field and whatever editor its asset brings with it are both too tall for a property
+    // row, so they go between two property tables rather than inside one.
+    UI::end_properties();
+
+    modified |= inspector_panel.draw_asset_field(name, *uuid);
+    inspector_panel.draw_asset_contents(*uuid);
+
+    UI::begin_properties();
+  }
+};
+
+InspectorPanel::InspectorPanel() : EditorPanelState("Inspector", ICON_MDI_INFORMATION, true), scene_(nullptr) {
+  auto& event_system = App::get_event_system();
+  auto& asset_man = App::mod<AssetManager>();
+
+  auto r = event_system.subscribe<DialogSaveEvent>([&asset_man](const DialogSaveEvent& e) {
+    if (!export_asset(asset_man, e.asset_uuid, e.path)) {
+      OX_LOG_ERROR("Couldn't save asset {} to {}!", e.asset_uuid.str(), e.path);
+      return;
+    }
+
+    App::mod<Editor>().thumbnail_manager.invalidate_material(e.asset_uuid);
+  });
+}
+
+void InspectorPanel::on_render(this InspectorPanel& self, vuk::ImageAttachment swapchain_attachment) {
+  auto& editor = App::mod<Editor>();
+  self.scene_ = editor.get_selected_scene();
+
+  self.on_begin();
+
+  self.handle_editor_context();
+
+  self.on_end();
+}
+
+auto InspectorPanel::handle_editor_context(this InspectorPanel& self) -> void {
+  ZoneScoped;
+
+  auto& editor = App::mod<Editor>();
+  auto& editor_context = editor.get_context();
+
+  if (editor_context.entity) {
+    auto e = editor_context.entity.value();
+
+    if (e != self.last_edited_entity) {
+      self.euler_cache.reset();
+      // The open picker is identified by the address of a field on the entity that was inspected,
+      // which means nothing once a different one is.
+      self.asset_picker_field = nullptr;
+      self.last_edited_entity = e;
+    }
+
+    self.draw_components(e);
+  } else if (editor_context.type == EditorContext::Type::File) {
+    if (!editor_context.str.has_value()) {
+      return;
+    }
+
+    auto& asset_man = App::mod<AssetManager>();
+
+    // Selecting a file is a request to look at the asset inside it, and only the registry can say
+    // what that is. Importing registers the file (writing its meta the first time) and hands back
+    // the uuid everything else is keyed on; for a file that has been imported already it just
+    // resolves. Files of a type the manager does not handle yield nothing, as before.
+    auto path = std::filesystem::path(editor_context.str.value());
+
+    // a sidecar is not the asset itself: `foo.png.oxasset` describes `foo.png`, and that is what
+    // the inspector should be showing. Assets that own their meta file have nothing to strip.
+    if (path.extension() == ".oxasset") {
+      auto stripped = path;
+      stripped.replace_extension();
+      if (std::filesystem::exists(stripped)) {
+        path = std::move(stripped);
+      }
+    }
+
+    if (path != self.resolved_asset_path) {
+      self.resolved_asset_path = std::move(path);
+      self.resolved_asset_uuid = import_asset(asset_man, self.resolved_asset_path);
+      self.asset_picker_field = nullptr;
+    }
+
+    if (auto asset = asset_man.get_asset(self.resolved_asset_uuid)) {
+      self.draw_asset_info(std::move(asset), self.resolved_asset_path);
+    }
+  }
+}
+
+auto InspectorPanel::draw_material_properties(
+  ReadGuard<Material> material, const UUID& material_uuid, const std::filesystem::path& default_path
+) -> bool {
+  if (material_uuid) {
+    const auto& window = App::get_window();
+
+    auto uuid_str = fmt::format("UUID: {}", material_uuid.str());
+    ImGui::TextUnformatted(uuid_str.c_str());
+
+    const float x = ImGui::GetContentRegionAvail().x / 2;
+    const float y = ImGui::GetFrameHeight();
+
+    const auto has_own_file = owns_meta_file(default_path);
+
+    const auto open_save_as_dialog = [&window, &material_uuid, &default_path] {
+      pending_save_material_uuid = material_uuid;
+
+      FileDialogFilter dialog_filters[] = {{.name = "Asset (.oxasset)", .pattern = "oxasset"}};
+      window.show_dialog({
+        .kind = DialogKind::SaveFile,
+        .user_data = nullptr,
+        .callback =
+          [](void*, const c8* const* files, i32) {
+            if (!files || !*files || !pending_save_material_uuid) {
+              return;
+            }
+
+            const auto first_path_cstr = *files;
+            const auto first_path_len = std::strlen(first_path_cstr);
+            auto path = std::string(first_path_cstr, first_path_len);
+
+            auto& event_system = App::get_event_system();
+            auto r = event_system.emit(DialogSaveEvent{pending_save_material_uuid, path});
+            if (!r.has_value()) {
+              OX_LOG_ERROR("{}", r.error().message());
+            }
+          },
+        .title = "Save material asset file...",
+        .default_path = default_path,
+        .filters = dialog_filters,
+        .multi_select = false,
+      });
+    };
+
+    auto save_str = fmt::format("{} Save", ICON_MDI_CONTENT_SAVE);
+    if (UI::button(save_str.c_str(), {x, y})) {
+      if (has_own_file) {
+        auto& event_system = App::get_event_system();
+        auto r = event_system.emit(DialogSaveEvent{material_uuid, default_path});
+        if (!r.has_value()) {
+          OX_LOG_ERROR("{}", r.error().message());
+        }
+      } else {
+        open_save_as_dialog();
+      }
+    }
+
+    if (ImGui::BeginDragDropSource()) {
+      std::string path_str = default_path.empty() ? "new_material" : default_path.filename().string();
+      auto payload = PayloadData(path_str, material_uuid);
+      ImGui::SetDragDropPayload(PayloadData::DRAG_DROP_TARGET, &payload, payload.size());
+      ImGui::TextUnformatted(path_str.c_str());
+      ImGui::EndDragDropSource();
+    }
+
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_NoSharedDelay)) {
+      ImGui::BeginTooltip();
+      if (has_own_file) {
+        ImGui::Text("Writes the material back to its own asset file.");
+      } else {
+        ImGui::Text("This material lives inside another asset and asks where to write a copy.");
+      }
+      ImGui::Text("You can drag&drop this into content window to save a copy.");
+      ImGui::EndTooltip();
+    }
+
+    ImGui::SameLine();
+
+    auto save_as_str = fmt::format("{} Save As", ICON_MDI_CONTENT_SAVE_EDIT);
+    if (UI::button(save_as_str.c_str(), {x, y})) {
+      open_save_as_dialog();
+    }
+  }
+
+  bool dirty = false;
+
+  UI::begin_properties(UI::default_properties_flags);
+
+  const char* alpha_modes[] = {"Opaque", "Mask", "Blend"};
+  dirty |= UI::property("Alpha mode", reinterpret_cast<int*>(&material->alpha_mode), alpha_modes, 3);
+  if (material->alpha_mode == AlphaMode::Mask) {
+    dirty |= UI::property("Alpha cutoff", &material->alpha_cutoff, 0.0f, 1.0f);
+  }
+
+  const char* samplers[] = {
+    "LinearRepeated",
+    "LinearClamped",
+    "NearestRepeated",
+    "NearestClamped",
+    "LinearRepeatedAnisotropy",
+  };
+  dirty |= UI::property("Sampler", reinterpret_cast<int*>(&material->sampling_mode), samplers, 5);
+
+  dirty |= UI::property_vector<glm::vec2>("UV Size", material->uv_size, false, false, nullptr, 0.1f, 0.1f, 10.f);
+  dirty |= UI::property_vector<glm::vec2>("UV Offset", material->uv_offset, false, false, nullptr, 0.1f, -10.f, 10.f);
+
+  dirty |= UI::property_vector("Color", material->albedo_color, true, true);
+
+  // draw_material_properties is static (the material browser reaches it without a panel), so the
+  // texture picker keeps its own viewer rather than borrowing the inspector's.
+  const auto load_callback = [](bool is_srgb) {
+    return [is_srgb](const char* label, const UUID& uuid, bool& active) -> UUID {
+      memory::ScopedStack stack;
+
+      static auto texture_picker = AssetBrowser{};
+      const auto picked = texture_picker.render_picker(
+        stack.format_char("Pick {} texture###TexturePicker", label),
+        &active,
+        AssetType::Texture,
+        uuid
+      );
+
+      if (!picked || picked->uuid == uuid) {
+        return UUID(nullptr);
+      }
+
+      auto& asset_man = App::mod<AssetManager>();
+      if (!asset_man.load_asset(picked->uuid, TextureLoadInfo{.is_srgb = is_srgb})) {
+        return UUID(nullptr);
+      }
+
+      if (uuid) {
+        asset_man.unload_asset(uuid);
+      }
+
+      return picked->uuid;
+    };
+  };
+
+  const auto import_callback = [](const std::filesystem::path& path) -> UUID {
+    return import_asset(App::mod<AssetManager>(), path);
+  };
+
+  const auto texture_slot = [&](const char* label, UUID& uuid, bool is_srgb) -> bool {
+    return UI::texture_property(label, uuid, is_srgb, load_callback(is_srgb), import_callback);
+  };
+
+  dirty |= texture_slot("Albedo", material->albedo_texture, true);
+  dirty |= texture_slot("Normal", material->normal_texture, false);
+  dirty |= UI::property("Normal Scale", &material->normal_scale, 0.0f, 4.0f);
+  dirty |= UI::property("Flip Normal Y", &material->flip_normal_y, "Enable for DirectX-convention normal maps.");
+  dirty |= texture_slot("Emissive", material->emissive_texture, true);
+  dirty |= UI::property_vector("Emissive Color", material->emissive_color, true, false);
+  dirty |= texture_slot("Metallic Roughness", material->metallic_roughness_texture, false);
+  dirty |= UI::property("Roughness Factor", &material->roughness_factor, 0.0f, 1.0f);
+  dirty |= UI::property("Metallic Factor", &material->metallic_factor, 0.0f, 1.0f);
+  dirty |= texture_slot("Occlusion", material->occlusion_texture, false);
+  dirty |= UI::property("Occlusion Strength", &material->occlusion_strength, 0.0f, 1.0f);
+
+  UI::end_properties();
+
+  return dirty;
+}
+
+void InspectorPanel::draw_component_context_menu(bool& remove_component, flecs::entity entity, flecs::id fid) {
+  ZoneScoped;
+
+  memory::ScopedStack stack;
+  auto remove_component_txt = stack.format("{} Remove Component", ICON_MDI_MINUS);
+  auto reset_component_txt = stack.format("{} Reset Component", ICON_MDI_RELOAD);
+  auto copy_component_txt = stack.format("{} Copy Component", ICON_MDI_CONTENT_COPY);
+  auto paste_component_txt = stack.format("{} Paste Component", ICON_MDI_CONTENT_PASTE);
+
+  if (ImGui::MenuItem(remove_component_txt.data())) {
+    remove_component = true;
+  }
+  if (ImGui::MenuItem(reset_component_txt.data())) {
+    entity.remove(fid).add(fid);
+  }
+  if (ImGui::MenuItem(copy_component_txt.data())) {
+    component_clipboard.source_entity = entity;
+    component_clipboard.component_id = fid;
+  }
+  if (ImGui::MenuItem(paste_component_txt.data())) {
+    if (component_clipboard.is_valid() && component_clipboard.source_entity != entity) {
+      auto& editor = App::mod<Editor>();
+      auto& undo_redo_system = editor.undo_redo_system;
+      undo_redo_system->execute_command<ComponentCopyCommand>(
+        component_clipboard.source_entity,
+        entity,
+        component_clipboard.component_id,
+        "Paste Component"
+      );
+    }
+  }
+}
+
+void InspectorPanel::draw_components(this InspectorPanel& self, flecs::entity entity) {
+  ZoneScoped;
+
+  if (!entity || !self.scene_)
+    return;
+
+  auto& editor = App::mod<Editor>();
+  auto& undo_redo_system = editor.undo_redo_system;
+
+  ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - (ImGui::CalcTextSize(ICON_MDI_PLUS).x + UI::scale(20.0f)));
+  std::string new_name = entity.name().c_str();
+  if (self.rename_entity_)
+    ImGui::SetKeyboardFocusHere();
+  UI::push_frame_style();
+  if (ImGui::InputText("##Tag", &new_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
+    entity.set_name(new_name.c_str());
+  }
+  UI::pop_frame_style();
+  ImGui::PopItemWidth();
+  ImGui::SameLine();
+
+  if (UI::button(ICON_MDI_PLUS)) {
+    ImGui::OpenPopup("add_component");
+  }
+
+  const auto components = self.scene_->component_db.get_components();
+
+  if (ImGui::BeginPopup("add_component")) {
+    static ImGuiTextFilter add_component_filter = {};
+    float filter_cursor_pos_x = ImGui::GetCursorPosX();
+
+    if (ImGui::IsWindowAppearing()) {
+      ImGui::SetKeyboardFocusHere();
+    }
+    add_component_filter.Draw("##scripts_filter_", ImGui::GetContentRegionAvail().x);
+    if (!add_component_filter.IsActive()) {
+      ImGui::SameLine();
+      ImGui::SetCursorPosX(filter_cursor_pos_x + ImGui::GetFontSize() * 0.5f);
+      auto search_txt = fmt::format("  {} Search components...", ICON_MDI_MAGNIFY);
+      ImGui::TextUnformatted(search_txt.c_str());
+    }
+
+    for (auto& component : components) {
+      auto component_entity = component.entity();
+      auto component_name = component_entity.name();
+
+      if (add_component_filter.IsActive() && !add_component_filter.PassFilter(component_name.c_str())) {
+        continue;
+      }
+
+      if (ImGui::MenuItem(component_name)) {
+        if (entity.has(component))
+          OX_LOG_WARN("Entity already has same component!");
+        else
+          entity.add(component);
+        ImGui::CloseCurrentPopup();
+      }
+    }
+    ImGui::EndPopup();
+  }
+
+  entity.each([&](flecs::id fid) {
+    memory::ScopedStack stack;
+    static constexpr ImGuiTreeNodeFlags TREE_FLAGS = ImGuiTreeNodeFlags_DefaultOpen |
+                                                     ImGuiTreeNodeFlags_SpanAvailWidth |
+                                                     ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_Framed |
+                                                     ImGuiTreeNodeFlags_FramePadding;
+    const float line_height = ImGui::GetFontSize() + GImGui->Style.FramePadding.y * 2.0f;
+
+    auto ty = fid.type_id();
+    if (!ty) {
+      return;
+    }
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + line_height * 0.25f);
+
+    bool remove_component = false;
+
+    auto component_name = ty.name();
+    auto name_cstr = stack.format_char("{} {}:{}", ICON_MDI_VIEW_GRID, component_name.c_str(), fid.raw_id());
+    const bool open = ImGui::TreeNodeEx(name_cstr, TREE_FLAGS, "%s", name_cstr);
+    if (ImGui::BeginPopupContextItem()) {
+      self.draw_component_context_menu(remove_component, entity, fid);
+      ImGui::EndPopup();
+    }
+
+    ImGui::PushID(name_cstr);
+    const float frame_height = ImGui::GetFrameHeight();
+    ImGui::SameLine(ImGui::GetContentRegionMax().x - frame_height * 1.2f);
+    if (UI::button(ICON_MDI_COG, ImVec2{frame_height * 1.2f, frame_height})) {
+      ImGui::OpenPopup("ComponentSettings");
+    }
+
+    if (ImGui::BeginPopup("ComponentSettings")) {
+      self.draw_component_context_menu(remove_component, entity, fid);
+      ImGui::EndPopup();
+    }
+    ImGui::PopID();
+
+    if (open && ty.has<flecs::TypeSerializer>()) {
+      ImGuiTableFlags properties_flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerV;
+
+      UI::begin_properties(properties_flags);
+
+      auto world = entity.world();
+      auto inspector = EntityInspector(world, *undo_redo_system.get(), self);
+      auto* component = entity.get_mut(fid);
+      inspector.serialize(ty, component);
+      if (inspector.modified) {
+        entity.modified(fid);
+      }
+
+      UI::end_properties();
+      ImGui::TreePop();
+    }
+
+    if (remove_component) {
+      if (fid == entity.world().component<TransformComponent>().type_id()) {
+        OX_LOG_ERROR("Can't remove TransformComponent!");
+      } else {
+        entity.remove(fid);
+      }
+    }
+  });
+}
+
+auto InspectorPanel::draw_asset_field(this InspectorPanel& self, const std::string_view label, UUID& uuid) -> bool {
+  ZoneScoped;
+  memory::ScopedStack stack;
+
+  auto& asset_man = App::mod<AssetManager>();
+  auto& editor = App::mod<Editor>();
+
+  auto type = AssetType::None;
+  auto registry_path = std::filesystem::path{};
+  if (auto asset = asset_man.get_asset(uuid)) {
+    type = asset->type;
+    registry_path = asset->path;
+  }
+  const auto picker_type = type != AssetType::None ? type : expected_asset_type(label);
+  // The same resolution the browser rows get, so a field and the picker it opens call an asset by
+  // the same name instead of the field showing the cache pack.
+  const auto path = asset_display_path(uuid, registry_path);
+  const auto name = uuid ? asset_display_name(uuid, registry_path) : std::string("None");
+
+  // Putting a model in a scene has to go through Scene::create_model_entity, which builds the
+  // entity hierarchy the mesh instances need; pointing a bare uuid field at one would skip that.
+  const auto pickable = picker_type != AssetType::Model;
+  const auto browse_tooltip = pickable ? "Click to browse, or drop an asset file here"
+                                       : "Models are added to the scene from the content browser, not assigned here";
+
+  auto changed = false;
+
+  ImGui::PushID(&uuid);
+  ImGui::SeparatorText(stack.format_char("{} {}", asset_type_icon(picker_type), label));
+
+  // Any file dropped here is imported first, so dragging straight from the content browser works
+  // even for a file the registry has never seen.
+  const auto accept_drop = [&asset_man, &uuid, &changed, pickable] {
+    if (!pickable || !ImGui::BeginDragDropTarget()) {
+      return;
+    }
+
+    if (const ImGuiPayload* imgui_payload = ImGui::AcceptDragDropPayload(PayloadData::DRAG_DROP_SOURCE)) {
+      const auto* payload = PayloadData::from_payload(imgui_payload);
+      if (
+        const auto imported = import_asset(asset_man, payload->get_path()); imported && asset_man.load_asset(imported)
+      ) {
+        // Must not hold a registry read guard while unloading: unload_asset() takes the registry
+        // write lock. unload_asset() no-ops on missing/unloaded assets.
+        if (uuid) {
+          asset_man.unload_asset(uuid);
+        }
+        uuid = imported;
+        changed = true;
+      }
+    }
+    ImGui::EndDragDropTarget();
+  };
+
+  const auto preview_size = ImGui::GetFrameHeight() * 2.0f + ImGui::GetStyle().ItemSpacing.y;
+  const auto thumbnail = uuid ? editor.thumbnail_manager.get_thumbnail(type, registry_path, uuid) : TextureView{};
+  auto browse = false;
+
+  ImGui::BeginDisabled(!pickable);
+  if (thumbnail) {
+    browse |= UI::image_button("##asset_preview", thumbnail, {preview_size, preview_size});
+  } else {
+    browse |= UI::button(
+      stack.format_char("{}##asset_preview", asset_type_icon(picker_type)),
+      {preview_size, preview_size}
+    );
+  }
+  ImGui::EndDisabled();
+  UI::tooltip_hover(browse_tooltip);
+  accept_drop();
+
+  ImGui::SameLine();
+
+  ImGui::BeginGroup();
+  ImGui::TextUnformatted(name.c_str());
+  if (uuid) {
+    UI::tooltip_hover(stack.format_char("{}\n{}", path.string(), uuid.str()));
+  }
+
+  ImGui::BeginDisabled(!pickable);
+  browse |= UI::button(stack.format_char("{} Browse", ICON_MDI_MAGNIFY));
+  ImGui::EndDisabled();
+  UI::tooltip_hover(browse_tooltip);
+  accept_drop();
+
+  ImGui::SameLine();
+
+  ImGui::BeginDisabled(!uuid || !pickable);
+  if (UI::button(stack.format_char("{} Clear", ICON_MDI_CLOSE))) {
+    // The field owns one reference, the same way picking and dropping do, so clearing gives it back.
+    asset_man.unload_asset(uuid);
+    uuid = UUID(nullptr);
+    changed = true;
+  }
+  ImGui::EndDisabled();
+  ImGui::EndGroup();
+
+  if (browse) {
+    self.asset_picker_field = &uuid;
+  }
+
+  if (self.asset_picker_field == &uuid) {
+    auto open = true;
+    const auto picked = self.asset_browser
+                          .render_picker(stack.format_char("Pick {}###AssetPicker", label), &open, picker_type, uuid);
+
+    if (picked && picked->uuid != uuid && asset_man.load_asset(picked->uuid)) {
+      if (uuid) {
+        asset_man.unload_asset(uuid);
+      }
+      uuid = picked->uuid;
+      changed = true;
+    }
+
+    if (!open) {
+      self.asset_picker_field = nullptr;
+    }
+  }
+
+  ImGui::PopID();
+
+  return changed;
+}
+
+auto InspectorPanel::draw_asset_contents(this InspectorPanel& self, const UUID& uuid) -> void {
+  ZoneScoped;
+
+  auto& asset_man = App::mod<AssetManager>();
+  auto& editor = App::mod<Editor>();
+
+  auto asset = asset_man.get_asset(uuid);
+  if (!asset) {
+    return;
+  }
+
+  const auto type = asset->type;
+  const auto path = asset->path;
+  const auto material_id = type == AssetType::Material ? asset->material_id : MaterialID::Invalid;
+  const auto audio_id = type == AssetType::Audio ? asset->audio_id : AudioID::Invalid;
+  const auto script_id = type == AssetType::Script ? asset->script_id : ScriptID::Invalid;
+  asset.reset();
+
+  switch (type) {
+    case AssetType::None   :
+    case AssetType::Shader : // TODO: Shaders
+    case AssetType::Texture: // TODO: Textures
+    case AssetType::Font   : // TODO: Fonts
+    case AssetType::Scene  : // TODO: Scenes
+    case AssetType::Model  : // nothing to edit on a model itself yet
+    case AssetType::Terrain: // TODO: Terrain edits
+      break;
+    case AssetType::ParticleSystem: {
+      memory::ScopedStack stack;
+      if (UI::button(stack.format_char("{} Open Particle Editor", asset_type_icon(type)))) {
+        editor.editor_panel_registry.get<ParticleEditorPanel>().open_asset(uuid);
+      }
+      break;
+    }
+    case AssetType::Material: {
+      ImGui::SeparatorText("Material");
+      auto material = asset_man.get_material(material_id);
+      if (!material) {
+        ImGui::TextUnformatted("Couldn't load material.");
+        break;
+      }
+
+      const auto material_dirty = draw_material_properties(std::move(material), uuid, path);
+      material.reset();
+      if (material_dirty) {
+        asset_man.set_material_dirty(material_id);
+        editor.thumbnail_manager.invalidate_material(uuid);
+      }
+      break;
+    }
+    case AssetType::Audio: {
+      ImGui::SeparatorText("Audio");
+      self.draw_audio_asset(path, asset_man.get_audio(audio_id));
+      break;
+    }
+    case AssetType::Script: {
+      ImGui::SeparatorText("Script");
+      self.draw_script_asset(asset_man.get_script(script_id));
+      break;
+    }
+  }
+}
+
+auto InspectorPanel::draw_asset_info(
+  this InspectorPanel& self, ReadGuard<Asset> asset, const std::filesystem::path& source_path
+) -> void {
+  ZoneScoped;
+  memory::ScopedStack stack;
+
+  auto& editor = App::mod<Editor>();
+  auto& asset_man = App::mod<AssetManager>();
+
+  const auto asset_type = asset->type;
+  const auto asset_uuid = asset->uuid;
+  const auto asset_path = asset->path;
+  asset.reset();
+
+  auto type_str = AssetManager::to_asset_type_sv(asset_type);
+  auto uuid_str = asset_uuid.str();
+  auto name = source_path.filename().string();
+  auto path_str = source_path.string();
+
+  ImGui::SeparatorText(stack.format_char("{} Asset", asset_type_icon(asset_type)));
+  ImGui::Indent();
+
+  const auto thumbnail = editor.thumbnail_manager.get_thumbnail(asset_type, asset_path, asset_uuid);
+  const auto content_width = ImGui::GetContentRegionAvail().x - ImGui::GetStyle().IndentSpacing;
+  if (thumbnail) {
+    UI::image(thumbnail, {content_width, content_width});
+  } else {
+    ImGui::PushFont(nullptr, 32.f);
+    ImGui::BeginDisabled();
+    ImGui::TextUnformatted(stack.format_char("{} No preview", asset_type_icon(asset_type)));
+    ImGui::EndDisabled();
+    ImGui::PopFont();
+  }
+
+  UI::begin_properties(ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit);
+  UI::text("Type", type_str);
+  UI::input_text("UUID", &uuid_str, ImGuiInputTextFlags_ReadOnly);
+  UI::input_text("File", &name, ImGuiInputTextFlags_ReadOnly);
+  UI::input_text("Path", &path_str, ImGuiInputTextFlags_ReadOnly);
+  UI::end_properties();
+
+  ImGui::Unindent();
+
+  // Selecting a file in the content browser is a request to look at it, so anything it can preview
+  // gets loaded here rather than showing an empty editor.
+  if (!asset_man.is_loaded(asset_uuid)) {
+    asset_man.load_asset(asset_uuid);
+  }
+
+  self.draw_asset_contents(asset_uuid);
+}
+
+auto InspectorPanel::draw_audio_asset(
+  this InspectorPanel& self, const std::filesystem::path& path, ReadGuard<AudioSource> audio
+) -> void {
+  ZoneScoped;
+  memory::ScopedStack stack;
+
+  if (!audio) {
+    ImGui::TextUnformatted("Couldn't load audio.");
+    return;
+  }
+
+  auto& editor = App::mod<Editor>();
+  auto& audio_engine = App::mod<AudioEngine>();
+  auto* source = audio->get_source();
+  if (source == nullptr) {
+    ImGui::TextUnformatted("Couldn't load audio.");
+    return;
+  }
+
+  const auto length = audio_engine.get_source_length(source);
+  auto cursor = audio_engine.get_source_cursor(source);
+  const auto playing = audio_engine.is_source_playing(source);
+
+  // The waveform doubles as the seek bar: the whole strip is one item, drawn over by hand so the
+  // playhead can sit on top of it.
+  const auto width = ImGui::GetContentRegionAvail().x;
+  const auto height = UI::scale(64.0f);
+  ImGui::InvisibleButton("##waveform", {width, height});
+  const auto strip_min = ImGui::GetItemRectMin();
+  const auto strip_max = ImGui::GetItemRectMax();
+
+  auto* draw_list = ImGui::GetWindowDrawList();
+  if (const auto waveform = editor.thumbnail_manager.get_thumbnail_audio(path)) {
+    draw_list->AddImage(App::mod<ImGuiRenderer>().add_image(waveform), strip_min, strip_max);
+  } else {
+    draw_list->AddRectFilled(strip_min, strip_max, ImGui::GetColorU32(ImGuiCol_FrameBg));
+    draw_list->AddText(
+      {strip_min.x + ImGui::GetStyle().FramePadding.x, (strip_min.y + strip_max.y) * 0.5f},
+      ImGui::GetColorU32(ImGuiCol_TextDisabled),
+      editor.thumbnail_manager.thumbnail_unavailable(path) ? "No waveform for this file" : "Generating waveform..."
+    );
+  }
+
+  if (length > 0.0f && ImGui::IsItemActive()) {
+    const auto ratio = std::clamp((ImGui::GetIO().MousePos.x - strip_min.x) / width, 0.0f, 1.0f);
+    cursor = ratio * length;
+    audio_engine.seek_source(source, cursor);
+  }
+
+  if (length > 0.0f) {
+    const auto playhead_x = strip_min.x + width * std::clamp(cursor / length, 0.0f, 1.0f);
+    draw_list->AddLine(
+      {playhead_x, strip_min.y},
+      {playhead_x, strip_max.y},
+      ImGui::GetColorU32(ImGuiCol_SliderGrabActive),
+      UI::scale(2.0f)
+    );
+  }
+  draw_list->AddRect(strip_min, strip_max, ImGui::GetColorU32(ImGuiCol_Border));
+
+  const auto button_size = ImVec2(ImGui::GetFrameHeight() * 1.6f, ImGui::GetFrameHeight());
+
+  if (UI::button(stack.format_char("{}##rewind", ICON_MDI_SKIP_PREVIOUS), button_size, "Back to the start")) {
+    audio_engine.seek_source(source, 0.0f);
+  }
+
+  ImGui::SameLine();
+  if (playing) {
+    if (UI::button(stack.format_char("{}##pause", ICON_MDI_PAUSE), button_size, "Pause")) {
+      audio_engine.pause_source(source);
+    }
+  } else {
+    // play_source() always rewinds, so resuming a paused sound goes through unpause instead; a
+    // finished one still has to be rewound by hand or it resumes at its own end.
+    if (UI::button(stack.format_char("{}##play", ICON_MDI_PLAY), button_size, "Play")) {
+      if (audio_engine.is_source_at_end(source)) {
+        audio_engine.seek_source(source, 0.0f);
+      }
+      audio_engine.unpause_source(source);
+    }
+  }
+
+  ImGui::SameLine();
+  if (UI::button(stack.format_char("{}##stop", ICON_MDI_STOP), button_size, "Stop")) {
+    audio_engine.stop_source(source);
+  }
+
+  ImGui::SameLine();
+  const auto looping = audio_engine.is_source_looping(source);
+  if (
+    UI::toggle_button(
+      stack.format_char("{}##loop", looping ? ICON_MDI_REPEAT : ICON_MDI_REPEAT_OFF),
+      looping,
+      button_size
+    )
+  ) {
+    audio_engine.set_source_looping(source, !looping);
+  }
+  UI::tooltip_hover("Loop the preview");
+
+  ImGui::SameLine();
+  ImGui::TextUnformatted(
+    stack.format_char("{} / {}", format_timestamp(stack, cursor), format_timestamp(stack, length))
+  );
+
+  auto volume = audio_engine.get_source_volume(source);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+  if (ImGui::SliderFloat("##preview_volume", &volume, 0.0f, 1.0f, "Volume %.2f")) {
+    audio_engine.set_source_volume(source, volume);
+  }
+}
+
+auto InspectorPanel::draw_script_asset(this InspectorPanel& self, ReadGuard<LuaScript> script) -> void {
+  ZoneScoped;
+  memory::ScopedStack stack;
+
+  if (!script) {
+    ImGui::TextUnformatted("Couldn't load script.");
+    return;
+  }
+
+  auto script_path_str = script->path.string();
+
+  UI::begin_properties(ImGuiTableFlags_SizingFixedFit);
+  UI::text("File", stack.format("{}", script->path.filename()));
+  UI::input_text("Path", &script_path_str, ImGuiInputTextFlags_ReadOnly);
+  UI::end_properties();
+}
+} // namespace ox
