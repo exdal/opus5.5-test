@@ -1,0 +1,202 @@
+#include "Notification.hpp"
+
+#include <fmt/format.h>
+#include <icons/IconsMaterialDesignIcons.h>
+#include <imgui_internal.h>
+#include <imspinner.h>
+#include <tracy/Tracy.hpp>
+
+#include "Core/App.hpp"
+#include "EditorTheme.hpp"
+#include "UI/UI.hpp"
+
+namespace ox {
+static constexpr auto notification_window_size = ImVec2(400.f, 60.f);
+static constexpr auto root_window_size = ImVec2(420.f, 80.f);
+static constexpr f32 padding = 10.f;
+// the panel is a log now, so it keeps enough scrollback to be worth searching
+static constexpr usize history_max = 512;
+
+auto NotificationSystem::add(this NotificationSystem& self, Notification&& notif) -> void {
+  ZoneScoped;
+
+  // before the lock: this logs, which re-enters `add` through the same callback
+  if (notif.title.empty()) {
+    OX_LOG_WARN("Unnamed activity found!");
+    return;
+  }
+
+  auto lock = std::unique_lock(self.pending_mutex);
+  self.pending.emplace_back(std::move(notif));
+}
+
+auto NotificationSystem::drain_pending(this NotificationSystem& self) -> void {
+  ZoneScoped;
+
+  auto incoming = std::vector<Notification>();
+  {
+    auto lock = std::unique_lock(self.pending_mutex);
+    if (self.pending.empty()) {
+      return;
+    }
+
+    incoming.swap(self.pending);
+  }
+
+  for (auto& notif : incoming) {
+    if (self.active_notifications.contains(notif.title) && notif.completed) {
+      self.active_notifications.insert_or_assign(notif.title, std::move(notif));
+      continue;
+    }
+
+    // a message repeating back to back is one row with a counter, otherwise a spamming system
+    // pushes everything else out of the history
+    auto* last = self.notification_history.empty() ? nullptr : &self.notification_history.back();
+    if (last != nullptr && last->type == notif.type && last->title == notif.title) {
+      last->repeat_count += 1;
+      last->created_at = notif.created_at;
+      last->wall_time = notif.wall_time;
+    } else {
+      notif.id = self.next_notification_id++;
+      self.notification_history.emplace_back(notif);
+    }
+
+    self.active_notifications.emplace(notif.title, std::move(notif));
+  }
+
+  if (self.notification_history.size() > history_max) {
+    const auto excess = self.notification_history.size() - history_max;
+    self.notification_history.erase(
+      self.notification_history.begin(),
+      self.notification_history.begin() + static_cast<std::ptrdiff_t>(excess)
+    );
+  }
+}
+
+auto NotificationSystem::clear_history(this NotificationSystem& self) -> void {
+  ZoneScoped;
+
+  self.notification_history.clear();
+}
+
+auto NotificationSystem::get_last_notification(this NotificationSystem& self) -> option<Notification> {
+  ZoneScoped;
+
+  if (!self.notification_history.empty())
+    return self.notification_history.back();
+
+  return nullopt;
+}
+
+auto NotificationSystem::draw(this NotificationSystem& self) -> void {
+  ZoneScoped;
+
+  self.drain_pending();
+
+  // Bottom right
+  const auto scaled_root_window_size = UI::scale(root_window_size);
+  const auto scaled_padding = UI::scale(padding);
+  ImVec2 root_screen_pos = ImGui::GetMainViewport()->Size;
+  root_screen_pos.x -= scaled_root_window_size.x + scaled_padding;
+  root_screen_pos.y -= scaled_root_window_size.y + scaled_padding + UI::scale(25.0f);
+
+  if (self.active_notifications.empty())
+    return;
+
+  App::get_window().set_cursor_override(WindowCursor::Progress);
+
+  ImGui::SetNextWindowPos({root_screen_pos.x, root_screen_pos.y}, ImGuiCond_Always);
+  ImGui::SetNextWindowSize(scaled_root_window_size, ImGuiCond_Always);
+  ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.f, 0.f, 0.f, 0.f));
+  ImGui::Begin(
+    "##Notifications",
+    nullptr,
+    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoNav
+  );
+  ImGui::PopStyleColor();
+
+  for (auto& [name, notif] : self.active_notifications) {
+    self.draw_single(notif);
+  }
+
+  ImGui::End();
+
+  // Cleanup
+  const auto now = std::chrono::steady_clock::now();
+  constexpr auto delay = std::chrono::seconds(2); // so that really fast notifications don't flash
+  std::erase_if(self.active_notifications, [&](const auto& notif) {
+    return notif.second.completed && now - notif.second.created_at > delay;
+  });
+}
+
+auto NotificationSystem::draw_single(this NotificationSystem& self, Notification& notif) -> void {
+  ZoneScoped;
+
+  const auto scaled_notification_window_size = UI::scale(notification_window_size);
+  ImGui::SetNextWindowBgAlpha(0.8f);
+  ImGui::SetNextWindowSize(scaled_notification_window_size, ImGuiCond_Always);
+
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, UI::scale(3.0f));
+  ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, UI::scale(3.0f));
+  ImGui::PushStyleColor(ImGuiCol_Border, Gruvbox::dark0_hard.Value);
+  if (
+    ImGui::BeginChild(
+      notif.title.c_str(),
+      {},
+      ImGuiChildFlags_Borders | ImGuiChildFlags_FrameStyle,
+      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoInputs
+    )
+  ) {
+    ImSpinner::detail::SpinnerConfig config{};
+    config.setSpinnerType(ImSpinner::e_st_ang);
+    config.setSpeed(6.f);
+    config.setAngle(4.f);
+    config.setThickness(UI::scale(2.0f));
+    config.setRadius(UI::scale(16.0f));
+    config.setColor(ImColor(1.f, 1.f, 1.f, 1.f));
+    ImGui::PushFont(nullptr, 32.f);
+    const auto icon_child_size = UI::scale(60.0f);
+    // Center icon vertically
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.f, 0.f));
+    ImGui::SetCursorPos(ImVec2(0.f, 0.f));
+    ImGui::BeginChild(
+      "##notification_icon",
+      ImVec2(icon_child_size, scaled_notification_window_size.y),
+      0,
+      ImGuiWindowFlags_NoBackground
+    );
+    const auto icon_half_size = UI::scale(16.0f);
+    ImGui::SetCursorPos(ImVec2(icon_child_size / 2.0f - icon_half_size, icon_child_size / 2.0f - icon_half_size));
+    switch (notif.type) {
+      case Notification::Info   : ImGui::TextUnformatted(ICON_MDI_INFORMATION); break;
+      case Notification::Warn   : ImGui::TextUnformatted(ICON_MDI_ALERT); break;
+      case Notification::Error  : ImGui::TextUnformatted(ICON_MDI_EXCLAMATION); break;
+      case Notification::Loading: ImSpinner::Spinner("SpinnerAng270NoBg", config); break;
+    }
+    ImGui::PopFont();
+    ImGui::EndChild();
+
+    // Put in the same line
+    ImGui::SetCursorPos(ImVec2(icon_child_size, 0.f));
+    ImGui::BeginChild(
+      "##notification_text",
+      ImVec2(scaled_notification_window_size.x - icon_child_size, scaled_notification_window_size.y)
+    );
+    switch (notif.type) {
+      case Notification::Info   : ImGui::Text("Info: "); break;
+      case Notification::Warn   : ImGui::Text("Warning: "); break;
+      case Notification::Error  : ImGui::Text("Error:"); break;
+      case Notification::Loading: ImGui::Text("Loading..."); break;
+    }
+    ImGui::TextUnformatted(fmt::format("{}", notif.title).c_str());
+    ImGui::EndChild();
+    ImGui::PopStyleVar(2); // WindowPadding, FramePadding
+  }
+  ImGui::EndChild();
+
+  ImGui::PopStyleVar(2);
+  ImGui::PopStyleColor();
+}
+} // namespace ox

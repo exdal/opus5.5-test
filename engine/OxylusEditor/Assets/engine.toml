@@ -1,0 +1,544 @@
+version = 10
+
+[[shader_sessions]]
+root_directory = "../../Oxylus/src/Render/Shaders"
+session_name = "engine"
+debug_symbols = false
+optimization = "default"
+
+[[shader_sessions.programs]]
+name = "rmlui"
+path = "passes/rmlui.slang"
+entry_points = ["vs_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "imgui_shadow"
+path = "passes/imgui_shadow.slang"
+entry_points = ["vs_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "2d_forward"
+path = "passes/2d_forward.slang"
+entry_points = ["vs_main", "fs_main"]
+requires = ["bindless"]
+
+[[shader_sessions.programs]]
+name = "2d_forward_vis"
+path = "passes/2d_forward_vis.slang"
+entry_points = ["vs_main", "fs_main"]
+requires = ["bindless"]
+
+[[shader_sessions.programs]]
+name = "sky_transmittance"
+path = "passes/sky_transmittance.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "sky_multiscatter"
+path = "passes/sky_multiscattering.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "sky_view"
+path = "passes/sky_view.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "sky_aerial_perspective"
+path = "passes/sky_aerial_perspective.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "sky_ibl"
+path = "passes/sky_ibl.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "cull_meshes"
+path = "passes/cull_meshes.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "cull_meshlets"
+path = "passes/cull_meshlets.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "cull_meshlets_hiz"
+path = "passes/cull_meshlets_hiz.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "cull_meshlets_hpb"
+path = "passes/cull_meshlets_hpb.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "cull_triangles"
+path = "passes/cull_triangles.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "visbuffer_encode"
+path = "passes/visbuffer_encode.slang"
+entry_points = ["vs_main", "fs_main"]
+requires = ["bindless"]
+
+[[shader_sessions.programs]]
+name = "visbuffer_encode_ms"
+path = "passes/visbuffer_encode_ms.slang"
+entry_points = ["ts_main", "ms_main", "fs_main"]
+requires = ["bindless", "mesh_shaders"]
+
+[[shader_sessions.programs]]
+name = "tlas_write_instances"
+path = "passes/tlas_write_instances.slang"
+entry_points = ["cs_main"]
+requires = ["ray_tracing"]
+
+[[shader_sessions.programs]]
+name = "visbuffer_clear"
+path = "passes/visbuffer_clear.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "visbuffer_decode"
+path = "passes/visbuffer_decode.slang"
+entry_points = ["vs_main", "fs_main"]
+requires = ["bindless"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_allocate_pages"
+path = "passes/rmvsm_allocate_pages.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_build_free_page_list"
+path = "passes/rmvsm_build_free_page_list.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_build_draw_commands"
+path = "passes/rmvsm_build_draw_commands.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_clear_dirty_pages"
+path = "passes/rmvsm_clear_dirty_pages.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_debug"
+path = "passes/rmvsm_debug.slang"
+entry_points = ["vs_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_debug_pointspot"
+path = "passes/rmvsm_debug_pointspot.slang"
+entry_points = ["vs_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_downsample_hpb"
+path = "passes/rmvsm_downsample_hpb.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_draw_physical_pages"
+path = "passes/rmvsm_draw_physical_pages.slang"
+entry_points = ["vs_main", "fs_main"]
+requires = ["bindless"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_draw_physical_pages_ms"
+path = "passes/rmvsm_draw_physical_pages_ms.slang"
+entry_points = ["ts_main", "ms_main", "fs_main"]
+requires = ["bindless", "mesh_shaders"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_free_invisible_pages"
+path = "passes/rmvsm_free_invisible_pages.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_invalidate_pages"
+path = "passes/rmvsm_invalidate_pages.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_mark_dirty_pages"
+path = "passes/rmvsm_mark_dirty_pages.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_mark_visible_pages"
+path = "passes/rmvsm_mark_visible_pages.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_reset_page_visibility"
+path = "passes/rmvsm_reset_page_visibility.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_pointspot_reset_page_visibility"
+path = "passes/rmvsm_pointspot_reset_page_visibility.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_pointspot_free_invisible_pages"
+path = "passes/rmvsm_pointspot_free_invisible_pages.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_mark_visible_pages_pointspot"
+path = "passes/rmvsm_mark_visible_pages_pointspot.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_pointspot_mark_coarse_pages"
+path = "passes/rmvsm_pointspot_mark_coarse_pages.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_pointspot_mark_dirty_pages"
+path = "passes/rmvsm_pointspot_mark_dirty_pages.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_pointspot_invalidate_pages"
+path = "passes/rmvsm_pointspot_invalidate_pages.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_pointspot_build_active_layers"
+path = "passes/rmvsm_pointspot_build_active_layers.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_pointspot_cull_meshes"
+path = "passes/rmvsm_pointspot_cull_meshes.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_pointspot_downsample_hpb"
+path = "passes/rmvsm_pointspot_downsample_hpb.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_pointspot_cull_meshlets"
+path = "passes/rmvsm_pointspot_cull_meshlets.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_pointspot_cull_triangles"
+path = "passes/rmvsm_pointspot_cull_triangles.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_pointspot_draw_pages"
+path = "passes/rmvsm_pointspot_draw_pages.slang"
+entry_points = ["vs_main", "fs_main"]
+requires = ["bindless"]
+
+[[shader_sessions.programs]]
+name = "rmvsm_pointspot_draw_pages_ms"
+path = "passes/rmvsm_pointspot_draw_pages_ms.slang"
+entry_points = ["ts_main", "ms_main", "fs_main"]
+requires = ["bindless", "mesh_shaders"]
+
+[[shader_sessions.programs]]
+name = "resolve_shadowmaps"
+path = "passes/resolve_shadowmaps.slang"
+entry_points = ["vs_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "debug_view"
+path = "passes/debug_view.slang"
+entry_points = ["vs_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "pbr_apply"
+path = "passes/pbr_apply.slang"
+entry_points = ["vs_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "pbr_apply_no_atmos"
+path = "passes/pbr_apply_no_atmos.slang"
+entry_points = ["vs_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "light_grid"
+path = "passes/light_grid.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "pbr_apply_lights"
+path = "passes/pbr_apply_lights.slang"
+entry_points = ["vs_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "hiz"
+path = "passes/hiz.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "histogram_generate"
+path = "passes/histogram_generate.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "histogram_average"
+path = "passes/histogram_average.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "tonemap"
+path = "passes/tonemap.slang"
+entry_points = ["vs_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "bloom_prefilter"
+path = "passes/bloom_prefilter.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "bloom_downsample"
+path = "passes/bloom_downsample.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "bloom_upsample"
+path = "passes/bloom_upsample.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "vbgtao_prefilter"
+path = "passes/gtao/vbgtao_prefilter.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "vbgtao_main"
+path = "passes/gtao/vbgtao_main.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "vbgtao_denoise"
+path = "passes/gtao/vbgtao_denoise.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "rtao"
+path = "passes/rtao.slang"
+entry_points = ["cs_main"]
+requires = ["ray_tracing"]
+
+[[shader_sessions.programs]]
+name = "fxaa"
+path = "passes/fxaa/fxaa.slang"
+entry_points = ["vs_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "depth_upscale"
+path = "passes/depth_upscale.slang"
+entry_points = ["vs_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "fsr3_prepare_inputs"
+path = "passes/fsr3/fsr3_prepare_inputs.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "fsr3_farthest_depth_mip1"
+path = "passes/fsr3/fsr3_farthest_depth_mip1.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "fsr3_shading_change_pyramid"
+path = "passes/fsr3/fsr3_shading_change_pyramid.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "fsr3_downsample"
+path = "passes/fsr3/fsr3_downsample.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "fsr3_shading_change"
+path = "passes/fsr3/fsr3_shading_change.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "fsr3_prepare_reactivity"
+path = "passes/fsr3/fsr3_prepare_reactivity.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "fsr3_luma_instability"
+path = "passes/fsr3/fsr3_luma_instability.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "fsr3_accumulate"
+path = "passes/fsr3/fsr3_accumulate.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "fsr3_debug_view"
+path = "passes/fsr3/fsr3_debug_view.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "fsr3_rcas"
+path = "passes/fsr3/fsr3_rcas.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "debug_mesh"
+path = "passes/debug_mesh.slang"
+entry_points = ["vs_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "ddgi_trace"
+path = "passes/ddgi_trace.slang"
+entry_points = ["rgs_main", "miss_main", "closesthit_main"]
+requires = ["ray_tracing", "ray_tracing_pipeline", "bindless"]
+
+[[shader_sessions.programs]]
+name = "ddgi_select_probes"
+path = "passes/ddgi_select_probes.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "ddgi_build_dispatch_args"
+path = "passes/ddgi_build_dispatch_args.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "ddgi_relocate_probes"
+path = "passes/ddgi_relocate_probes.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "ddgi_apply"
+path = "passes/ddgi_apply.slang"
+entry_points = ["vs_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "ddgi_update_irradiance"
+path = "passes/ddgi_update_irradiance.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "ddgi_update_distance"
+path = "passes/ddgi_update_distance.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "ddgi_debug_probes"
+path = "passes/ddgi_debug_probes.slang"
+entry_points = ["vs_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "contact_shadows"
+path = "passes/contact_shadows.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "terrain_generate"
+path = "passes/terrain_generate.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "terrain_derive"
+path = "passes/terrain_derive.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "terrain_minmax"
+path = "passes/terrain_minmax.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "terrain_brush_trace"
+path = "passes/terrain_brush_trace.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "terrain_brush_apply"
+path = "passes/terrain_brush_apply.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "terrain_cull"
+path = "passes/terrain_cull.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "terrain_visbuffer"
+path = "passes/terrain_visbuffer.slang"
+entry_points = ["vs_main", "hs_main", "ds_main", "fs_main"]
+
+[[shader_sessions.programs]]
+name = "terrain_decode"
+path = "passes/terrain_decode.slang"
+entry_points = ["vs_main", "fs_main"]
+requires = ["bindless"]
+
+[[shader_sessions.programs]]
+name = "particle_init"
+path = "passes/particle_init.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "particle_prepare"
+path = "passes/particle_prepare.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "particle_emit"
+path = "passes/particle_emit.slang"
+entry_points = ["cs_main"]
+requires = ["bindless"]
+
+[[shader_sessions.programs]]
+name = "particle_build_dispatch_args"
+path = "passes/particle_build_dispatch_args.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "particle_simulate"
+path = "passes/particle_simulate.slang"
+entry_points = ["cs_main"]
+requires = ["bindless"]
+
+[[shader_sessions.programs]]
+name = "particle_sort_local"
+path = "passes/particle_sort_local.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "particle_sort_step"
+path = "passes/particle_sort_step.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "particle_sort_merge"
+path = "passes/particle_sort_merge.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "particle_build_draw_args"
+path = "passes/particle_build_draw_args.slang"
+entry_points = ["cs_main"]
+
+[[shader_sessions.programs]]
+name = "particle_billboard"
+path = "passes/particle_billboard.slang"
+entry_points = ["vs_main", "fs_main"]
+requires = ["bindless"]
+
+[[shader_sessions.programs]]
+name = "particle_mesh"
+path = "passes/particle_mesh.slang"
+entry_points = ["vs_main", "fs_main"]
+requires = ["bindless"]

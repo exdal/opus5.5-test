@@ -1,0 +1,286 @@
+#include <vuk/runtime/CommandBuffer.hpp>
+
+#include "Core/Enum.hpp"
+#include "Memory/Stack.hpp"
+#include "Render/RendererInstance.hpp"
+
+namespace ox {
+auto RendererInstance::draw_for_visbuffer_ms(this RendererInstance& self, MainGeometryContext& context) -> void {
+  ZoneScoped;
+  memory::ScopedStack stack;
+
+  auto encode_pass = vuk::make_pass(
+    stack.format("vis encode ms {}", context.cull_flags & GPU::CullFlag::LatePass ? "late" : "early"),
+    [&descriptor_set = *context.bindless_set,
+     draw_overdraw = context.draw_overdraw,
+     cull_flags = context.cull_flags,
+     cull_camera = context.cull_camera](
+      vuk::CommandBuffer& cmd_list,
+      VUK_BA(vuk::eIndirectRead) mesh_tasks_indirect,
+      VUK_IA(vuk::eMeshSampled) hiz,
+      VUK_BA(vuk::eMeshRead) meshes,
+      VUK_BA(vuk::eMeshRead) mesh_instances,
+      VUK_BA(vuk::eMeshRead) meshlet_instances,
+      VUK_BA(vuk::eMeshRead) transforms,
+      VUK_BA(vuk::eMeshRead) visibility,
+      VUK_BA(vuk::eMemoryRW) meshlet_instance_visibility_mask,
+      VUK_BA(vuk::eFragmentRead) materials,
+      VUK_IA(vuk::eColorRW) visbuffer,
+      VUK_IA(vuk::eDepthStencilRW) depth,
+      VUK_IA(vuk::eFragmentRW) overdraw
+    ) {
+      cmd_list //
+        .bind_graphics_pipeline("visbuffer_encode_ms")
+        .set_rasterization({.cullMode = vuk::CullModeFlagBits::eBack})
+        .set_depth_stencil(
+          {.depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual}
+        )
+        .set_color_blend(visbuffer, vuk::BlendPreset::eOff)
+        .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
+        .set_viewport(0, vuk::Rect2D::framebuffer())
+        .set_scissor(0, vuk::Rect2D::framebuffer())
+        .bind_image(0, 0, hiz)
+        .bind_buffer(0, 1, meshes)
+        .bind_buffer(0, 2, mesh_instances)
+        .bind_buffer(0, 3, meshlet_instances)
+        .bind_buffer(0, 4, transforms)
+        .bind_buffer(0, 5, visibility)
+        .bind_buffer(0, 6, meshlet_instance_visibility_mask)
+        .bind_buffer(0, 7, materials)
+        .bind_image(0, 8, overdraw)
+        .specialize_constants(0, std::to_underlying(cull_flags))
+        .specialize_constants(1, draw_overdraw)
+        .bind_persistent(1, descriptor_set)
+        .push_constants(vuk::ShaderStageFlagBits::eTaskEXT | vuk::ShaderStageFlagBits::eMeshEXT, 0, cull_camera)
+        .draw_mesh_tasks_indirect(mesh_tasks_indirect);
+
+      return std::make_tuple(
+        mesh_tasks_indirect,
+        hiz,
+        meshes,
+        mesh_instances,
+        meshlet_instances,
+        transforms,
+        visibility,
+        meshlet_instance_visibility_mask,
+        materials,
+        visbuffer,
+        depth,
+        overdraw
+      );
+    }
+  );
+
+  std::tie(
+    context.draw_geometry_cmd_buffer,
+    context.hiz_attachment,
+    self.prepared_frame.meshes_buffer,
+    self.prepared_frame.mesh_instances_buffer,
+    self.prepared_frame.meshlet_instances_buffer,
+    self.prepared_frame.transforms_world_buffer,
+    context.visibility_buffer,
+    self.prepared_frame.meshlet_instance_visibility_mask_buffer,
+    self.prepared_frame.materials_buffer,
+    context.visbuffer_attachment,
+    context.depth_attachment,
+    context.overdraw_attachment
+  ) =
+    encode_pass(
+      std::move(context.draw_geometry_cmd_buffer),
+      std::move(context.hiz_attachment),
+      std::move(self.prepared_frame.meshes_buffer),
+      std::move(self.prepared_frame.mesh_instances_buffer),
+      std::move(self.prepared_frame.meshlet_instances_buffer),
+      std::move(self.prepared_frame.transforms_world_buffer),
+      std::move(context.visibility_buffer),
+      std::move(self.prepared_frame.meshlet_instance_visibility_mask_buffer),
+      std::move(self.prepared_frame.materials_buffer),
+      std::move(context.visbuffer_attachment),
+      std::move(context.depth_attachment),
+      std::move(context.overdraw_attachment)
+    );
+}
+
+auto RendererInstance::draw_for_visbuffer(this RendererInstance& self, MainGeometryContext& context) -> void {
+  ZoneScoped;
+
+  if (self.prepared_frame.use_mesh_shaders) {
+    self.draw_for_visbuffer_ms(context);
+    return;
+  }
+
+  auto encode_pass = vuk::make_pass(
+    "vis encode",
+    [&descriptor_set = *context.bindless_set, draw_overdraw = context.draw_overdraw](
+      vuk::CommandBuffer& cmd_list,
+      VUK_BA(vuk::eIndirectRead) triangle_indirect,
+      VUK_BA(vuk::eIndexRead) index_buffer,
+      VUK_BA(vuk::eVertexRead) camera,
+      VUK_BA(vuk::eVertexRead) meshes,
+      VUK_BA(vuk::eVertexRead) mesh_instances,
+      VUK_BA(vuk::eVertexRead) meshlet_instances,
+      VUK_BA(vuk::eVertexRead) transforms,
+      VUK_BA(vuk::eFragmentRead) materials,
+      VUK_IA(vuk::eColorRW) visbuffer,
+      VUK_IA(vuk::eDepthStencilRW) depth,
+      VUK_IA(vuk::eFragmentRW) overdraw
+    ) {
+      cmd_list //
+        .bind_graphics_pipeline("visbuffer_encode")
+        .set_rasterization({.cullMode = vuk::CullModeFlagBits::eBack})
+        .set_depth_stencil(
+          {.depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual}
+        )
+        .set_color_blend(visbuffer, vuk::BlendPreset::eOff)
+        .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
+        .set_viewport(0, vuk::Rect2D::framebuffer())
+        .set_scissor(0, vuk::Rect2D::framebuffer())
+        .bind_buffer(0, 0, camera)
+        .bind_buffer(0, 1, meshes)
+        .bind_buffer(0, 2, mesh_instances)
+        .bind_buffer(0, 3, meshlet_instances)
+        .bind_buffer(0, 4, transforms)
+        .bind_buffer(0, 5, materials)
+        .bind_image(0, 6, overdraw)
+        .specialize_constants(0, draw_overdraw)
+        .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
+        .bind_persistent(1, descriptor_set)
+        .draw_indexed_indirect(1, triangle_indirect);
+
+      return std::make_tuple(
+        index_buffer, //
+        camera,
+        meshes,
+        mesh_instances,
+        meshlet_instances,
+        transforms,
+        materials,
+        visbuffer,
+        depth,
+        overdraw
+      );
+    }
+  );
+
+  std::tie(
+    self.prepared_frame.reordered_indices_buffer,
+    self.prepared_frame.camera_buffer,
+    self.prepared_frame.meshes_buffer,
+    self.prepared_frame.mesh_instances_buffer,
+    self.prepared_frame.meshlet_instances_buffer,
+    self.prepared_frame.transforms_world_buffer,
+    self.prepared_frame.materials_buffer,
+    context.visbuffer_attachment,
+    context.depth_attachment,
+    context.overdraw_attachment
+  ) =
+    encode_pass(
+      std::move(context.draw_geometry_cmd_buffer),
+      std::move(self.prepared_frame.reordered_indices_buffer),
+      std::move(self.prepared_frame.camera_buffer),
+      std::move(self.prepared_frame.meshes_buffer),
+      std::move(self.prepared_frame.mesh_instances_buffer),
+      std::move(self.prepared_frame.meshlet_instances_buffer),
+      std::move(self.prepared_frame.transforms_world_buffer),
+      std::move(self.prepared_frame.materials_buffer),
+      std::move(context.visbuffer_attachment),
+      std::move(context.depth_attachment),
+      std::move(context.overdraw_attachment)
+    );
+}
+
+auto RendererInstance::decode_visbuffer(this RendererInstance& self, MainGeometryContext& context) -> void {
+  ZoneScoped;
+
+  auto vis_decode_pass = vuk::make_pass(
+    "vis decode",
+    [&descriptor_set = *context.bindless_set](
+      vuk::CommandBuffer& cmd_list,
+      VUK_BA(vuk::eFragmentRead) camera,
+      VUK_BA(vuk::eFragmentRead) meshlet_instances,
+      VUK_BA(vuk::eFragmentRead) mesh_instances,
+      VUK_BA(vuk::eFragmentRead) meshes,
+      VUK_BA(vuk::eFragmentRead) transforms,
+      VUK_BA(vuk::eFragmentRead) transforms_previous,
+      VUK_BA(vuk::eFragmentRead) materials,
+      VUK_IA(vuk::eFragmentSampled) visbuffer,
+      VUK_IA(vuk::eColorRW) albedo,
+      VUK_IA(vuk::eColorRW) normal,
+      VUK_IA(vuk::eColorRW) emissive,
+      VUK_IA(vuk::eColorRW) metallic_roughness_occlusion,
+      VUK_IA(vuk::eColorRW) velocity
+    ) {
+      cmd_list //
+        .bind_graphics_pipeline("visbuffer_decode")
+        .set_rasterization({.cullMode = vuk::CullModeFlagBits::eNone})
+        .set_depth_stencil({})
+        .set_color_blend(albedo, vuk::BlendPreset::eOff)
+        .set_color_blend(normal, vuk::BlendPreset::eOff)
+        .set_color_blend(emissive, vuk::BlendPreset::eOff)
+        .set_color_blend(metallic_roughness_occlusion, vuk::BlendPreset::eOff)
+        .set_color_blend(velocity, vuk::BlendPreset::eOff)
+        .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
+        .set_viewport(0, vuk::Rect2D::framebuffer())
+        .set_scissor(0, vuk::Rect2D::framebuffer())
+        .bind_persistent(1, descriptor_set)
+        .bind_buffer(0, 0, camera)
+        .bind_buffer(0, 1, meshlet_instances)
+        .bind_buffer(0, 2, mesh_instances)
+        .bind_buffer(0, 3, meshes)
+        .bind_buffer(0, 4, transforms)
+        .bind_buffer(0, 5, transforms_previous)
+        .bind_buffer(0, 6, materials)
+        .bind_image(0, 7, visbuffer)
+        .draw(3, 1, 0, 1);
+
+      return std::make_tuple(
+        camera,
+        meshlet_instances,
+        mesh_instances,
+        meshes,
+        transforms,
+        transforms_previous,
+        materials,
+        visbuffer,
+        albedo,
+        normal,
+        emissive,
+        metallic_roughness_occlusion,
+        velocity
+      );
+    }
+  );
+
+  std::tie(
+    self.prepared_frame.camera_buffer,
+    self.prepared_frame.meshlet_instances_buffer,
+    self.prepared_frame.mesh_instances_buffer,
+    self.prepared_frame.meshes_buffer,
+    self.prepared_frame.transforms_world_buffer,
+    self.prepared_frame.transforms_previous_buffer,
+    self.prepared_frame.materials_buffer,
+    context.visbuffer_attachment,
+    context.albedo_attachment,
+    context.normal_attachment,
+    context.emissive_attachment,
+    context.metallic_roughness_occlusion_attachment,
+    context.velocity_attachment
+  ) =
+    vis_decode_pass(
+      std::move(self.prepared_frame.camera_buffer),
+      std::move(self.prepared_frame.meshlet_instances_buffer),
+      std::move(self.prepared_frame.mesh_instances_buffer),
+      std::move(self.prepared_frame.meshes_buffer),
+      std::move(self.prepared_frame.transforms_world_buffer),
+      std::move(self.prepared_frame.transforms_previous_buffer),
+      std::move(self.prepared_frame.materials_buffer),
+      std::move(context.visbuffer_attachment),
+      std::move(context.albedo_attachment),
+      std::move(context.normal_attachment),
+      std::move(context.emissive_attachment),
+      std::move(context.metallic_roughness_occlusion_attachment),
+      std::move(context.velocity_attachment)
+    );
+}
+
+} // namespace ox

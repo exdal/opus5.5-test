@@ -1,0 +1,26 @@
+option("profile")
+    set_default(false)
+    set_description("Enable application wide profiling.")
+    add_defines("TRACY_ENABLE=1", { public = true })
+
+option("lua_bindings")
+    set_default(true)
+    set_showmenu(true)
+    set_description("Enable Lua bindings")
+
+option("tests")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Enable tests")
+
+option("editor")
+    set_default(true)
+    set_showmenu(true)
+    set_description("Enable Oxylus Editor project")
+
+option("llvmpipe")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Force LLVMPipe instead of GPU during Vulkan device creation")
+    add_defines("OX_USE_LLVMPIPE=1", { public = true })
+option_end()

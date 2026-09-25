@@ -1,0 +1,50 @@
+add_repositories("oxylus https://github.com/oxylusengine/xmake-repo.git")
+set_policy("package.precompiled", false)
+add_rules("mode.debug", "mode.release", "mode.dist")
+add_rules("plugin.compile_commands.autoupdate", { outputdir = "./build", lsp = "clangd" })
+
+set_project("Oxylus")
+set_version("1.0.0")
+
+-- GLOBAL COMPILER FLAGS --
+set_encodings("utf-8")
+add_cxxflags("clang::-fexperimental-library")
+
+if is_plat("linux") and not is_mode("dist") then
+  add_ldflags("-rdynamic", { force = true })
+end
+
+-- WARNINGS --
+set_warnings("allextra", "pedantic")
+add_cxxflags(
+  "-Wshadow",
+  "-Wno-missing-braces",
+  "-Wno-unused-parameter",
+  "-Wno-unused-variable",
+  { tools = { "clang", "clangxx", "gcc", "cl", "clang_cl", "clang-cl" } }
+)
+add_cxxflags(
+  "-Wshadow-all",
+  "-Wno-gnu-line-marker",
+  "-Wno-gnu-anonymous-struct",
+  "-Wno-gnu-zero-variadic-macro-arguments",
+  "-Wno-c2y-extensions",
+  { tools = { "clang", "clangxx", "cl", "clang_cl", "clang-cl" } }
+)
+
+includes("xmake/options.lua")
+includes("xmake/rules.lua")
+includes("xmake/toolchains.lua")
+
+includes("xmake/packages.lua")
+require_packages()
+require_confs()
+
+includes("Oxylus")
+includes("ResourceCompiler")
+if has_config("editor") then
+  includes("OxylusEditor")
+end
+if has_config("tests") then
+  includes("Oxylus/tests")
+end
