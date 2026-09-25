@@ -821,7 +821,7 @@ auto Scene::init(this Scene& self, const std::string& name) -> void {
   self.world.system<VehicleComponent>("vehicle_input")
     .kind(flecs::OnUpdate)
     .tick_source(physics_tick_source)
-    .each([](VehicleComponent& vehicle) {
+    .each([&self](VehicleComponent& vehicle) {
       if (!vehicle.runtime_constraint)
         return;
 
@@ -830,14 +830,15 @@ auto Scene::init(this Scene& self, const std::string& name) -> void {
       controller
         ->SetDriverInput(vehicle.input_forward, vehicle.input_right, vehicle.input_brake, vehicle.input_hand_brake);
 
-      // Jolt puts the body to sleep on its own, and a sleeping chassis ignores driver input.
-      if (
-        vehicle.input_forward != 0.f || vehicle.input_right != 0.f || vehicle.input_brake != 0.f ||
-        vehicle.input_hand_brake != 0.f
-      ) {
-        constraint->GetVehicleBody()->GetMotionProperties()->SetLinearVelocity(
-          constraint->GetVehicleBody()->GetLinearVelocity()
-        );
+      // Jolt puts the body to sleep on its own, and a sleeping chassis ignores driver input. Writing the motion
+      // properties doesn't wake it (a parked car could never be driven off), activation has to go through the
+      // body interface, the same way Jolt's own vehicle samples do it
+      if (vehicle.input_forward != 0.f || vehicle.input_right != 0.f) {
+        const auto body_id = constraint->GetVehicleBody()->GetID();
+        auto& body_interface = self.physics_system->GetBodyInterface();
+        if (!body_interface.IsActive(body_id)) {
+          body_interface.ActivateBody(body_id);
+        }
       }
     });
 
