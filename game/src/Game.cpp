@@ -10,6 +10,7 @@
 #include "Core/Input.hpp"
 #include "Physics/Physics.hpp"
 #include "Render/RenderContext.hpp"
+#include "Render/Camera.hpp"
 #include "Render/Renderer.hpp"
 #include "Render/Window.hpp"
 #include "Scene/Scene.hpp"
@@ -73,6 +74,22 @@ auto Game::read_input(this Game& self) -> GameInput {
   input.horn = held(ScanCode::H);
   input.pause = pressed(ScanCode::Escape);
   input.confirm = pressed(ScanCode::Return, ScanCode::Space);
+
+  // aim: the cursor's ray through the camera, cut at the height bullets fly at. The matrices are last frame's,
+  // which is what the cursor was drawn over anyway
+  const auto* camera = self.world->camera.try_get<ox::CameraComponent>();
+  const auto window_size = glm::vec2(ox::App::get_window().get_logical_size());
+  if (camera && window_size.x > 0.0f && window_size.y > 0.0f) {
+    const auto ray = ox::Camera::get_screen_ray(*camera, in.get_mouse_position(), window_size);
+    // with the engine's reversed-z the ray's direction points back at the camera (see ENGINE_FEEDBACK.md), so solve
+    // for the line and don't care about the sign
+    const auto dir = ray.get_direction();
+    if (glm::abs(dir.y) > 0.0001f) {
+      const auto hit = ray.get_point_on_ray((BULLET_HEIGHT - ray.get_origin().y) / dir.y);
+      input.has_aim = true;
+      input.aim = {hit.x, hit.z};
+    }
+  }
 
   return input;
 }

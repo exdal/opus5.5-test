@@ -57,6 +57,8 @@ struct GameInput {
   bool horn = false;          // held
   bool pause = false;         // pressed
   bool confirm = false;       // pressed
+  bool has_aim = false;       // the mouse cursor is over the city
+  glm::vec2 aim = {};         // world x/z under the cursor, at bullet height
 };
 
 // --- gameplay objects -----------------------------------------------------------------------------------------------
@@ -360,6 +362,8 @@ public:
 // --- small helpers shared by every file ---------------------------------------------------------------------------
 
 inline auto forward_of(f32 heading) -> glm::vec2 { return {std::sin(heading), std::cos(heading)}; }
+// shots and tracers fly at roughly chest height, the mouse aim is taken at the same height
+inline constexpr f32 BULLET_HEIGHT = 1.15f;
 inline auto heading_of(glm::vec2 dir) -> f32 { return std::atan2(dir.x, dir.y); }
 inline auto yaw_quat(f32 heading) -> glm::quat { return glm::angleAxis(heading, glm::vec3(0.0f, 1.0f, 0.0f)); }
 inline auto to3(glm::vec2 p, f32 y = 0.0f) -> glm::vec3 { return {p.x, y, p.y}; }

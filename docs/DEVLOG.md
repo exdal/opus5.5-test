@@ -236,3 +236,17 @@ I had read it as noise). That's the second half of patch 11. Once that was fixed
 up: an 80 ms tracer now meant loading `tracer.glb` from disk on nearly every shot. The game now holds one
 ref on every model it spawns at runtime for the whole session (`runtime_models()` in `World.cpp`). That's
 a pattern the engine should make obvious (ENGINE_FEEDBACK.md, friction item 10).
+
+## Day 2: aiming with the mouse
+
+Next request: "I want to shoot where I am aiming". Until now the pistol fired along the player's heading,
+which is the direction you last walked. The engine already has `Camera::get_screen_ray(camera, mouse,
+window_size)`, and the camera component carries last frame's view/projection, so the game casts the cursor
+ray onto a plane at bullet height (1.15 m). With the pistol out, the player turns to face the cursor; on
+the frame you fire, the heading snaps to it, so the shot line goes exactly through the point under the
+cursor.
+
+One thing to watch out for: the ray comes back **pointing at the camera**. The function unprojects NDC
+z=0 and z=1 as near and far, but the projection is reversed-z (`glm::perspective(fov, aspect, far,
+near)`), so they're the wrong way round (B17). A plane intersection solved for the whole line doesn't
+care; a "march forward from the origin" pick would find nothing.

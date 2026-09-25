@@ -114,7 +114,12 @@ auto World::update_player(this World& self, const GameInput& input, f32 dt) -> v
   auto move = glm::vec2(input.move.x, -input.move.y);
   const auto speed = input.sprint ? SPRINT_SPEED : WALK_SPEED;
   auto velocity = move * speed;
-  if (glm::length2(move) > 0.01f) {
+  // with the pistol out you face the cursor (and can walk backwards while shooting), with fists you face where
+  // you're walking
+  const auto aiming = input.has_aim && p.weapon == Weapon::Pistol && glm::distance2(input.aim, p.position) > 0.01f;
+  if (aiming) {
+    p.heading += wrap_angle(heading_of(input.aim - p.position) - p.heading) * glm::min(1.0f, dt * 20.0f);
+  } else if (glm::length2(move) > 0.01f) {
     const auto target = heading_of(move);
     p.heading += wrap_angle(target - p.heading) * glm::min(1.0f, dt * 14.0f);
   }
@@ -138,6 +143,10 @@ auto World::update_player(this World& self, const GameInput& input, f32 dt) -> v
   self.animate_limbs(p.limbs, p.walk_phase, glm::min(1.0f, moving / WALK_SPEED), p.punch_anim);
 
   if (input.attack && p.attack_cooldown <= 0.0f) {
+    // shoot (or swing) exactly at the cursor: the shot leaves along the heading, so point it at the aim first
+    if (input.has_aim && glm::distance2(input.aim, p.position) > 0.01f) {
+      p.heading = heading_of(input.aim - p.position);
+    }
     self.player_attack();
   }
 
