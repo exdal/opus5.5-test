@@ -506,8 +506,12 @@ auto Scene::init(this Scene& self, const std::string& name) -> void {
   self.world.observer<TransformComponent, MeshComponent>()
     .event(flecs::OnRemove)
     .each([&self](flecs::iter& it, usize i, TransformComponent&, MeshComponent& mc) {
-      if (mc.model_uuid) {
-        self.detach_mesh(it.entity(i));
+      if (mc.model_uuid && self.detach_mesh(it.entity(i))) {
+        const auto& bounds = mc.world_aabb;
+        if (bounds.min != bounds.max) {
+          self.removed_mesh_bounds.emplace_back((bounds.min + bounds.max) * 0.5f, 0.0f);
+          self.removed_mesh_bounds.emplace_back(bounds.max - bounds.min, 0.0f);
+        }
       }
     });
 
@@ -1312,8 +1316,10 @@ auto Scene::prepare_render(this Scene& self) -> void {
       .gpu_mesh_blas_addresses = blas_addresses,
       .gpu_mesh_instances = gpu_mesh_instances,
       .dirty_mesh_instance_indices = dirty_mesh_instance_gpu_indices,
+      .removed_mesh_bounds = self.removed_mesh_bounds,
     };
     self.renderer_instance->update(update_info, self.renderer_cvar);
+    self.removed_mesh_bounds.clear();
 
     for (const auto transform_id : self.dirty_transforms) {
       if (auto* gpu_transform = self.transforms.slot(transform_id)) {

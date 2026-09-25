@@ -20,6 +20,9 @@ import cull;
 [[vk::binding(9)]] StructuredBuffer<TransformWorld> transforms;
 [[vk::binding(10)]] StructuredBuffer<TransformPrevious> transforms_previous;
 [[vk::binding(11)]] StructuredBuffer<VSMPointSpotView> views;
+// see rmvsm_invalidate_pages.slang: world-space (center, size) boxes of removed mesh instances
+[[vk::binding(12)]] StructuredBuffer<f32x4> removed_bounds;
+[[vk::constant_id(60)]] const u32 INVALIDATE_FROM_BOUNDS = 0;
 
 constexpr static i32 INVALIDATE_SECTIONS_PER_DIM = 4;
 
@@ -110,6 +113,25 @@ func cs_main(
         section_index % INVALIDATE_SECTIONS_PER_DIM,
         section_index / INVALIDATE_SECTIONS_PER_DIM
     );
+
+    if (INVALIDATE_FROM_BOUNDS != 0) {
+        let center = removed_bounds[mesh_index * 2].xyz;
+        let size = removed_bounds[mesh_index * 2 + 1].xyz;
+        if (distance(center, view.light_position) - length(size * 0.5) > view.range) {
+            return;
+        }
+        for (var mip = 0; mip < VSM_POINT_SPOT_MIP_COUNT; mip++) {
+            let mip_table_size = VSM_POINT_SPOT_PAGE_TABLE_SIZE >> mip;
+            let block_size = max(mip_table_size / INVALIDATE_SECTIONS_PER_DIM, 1);
+            let region_min = section_coords * block_size;
+            if (any(region_min >= mip_table_size)) {
+                continue;
+            }
+            let region_max = min(region_min + block_size, mip_table_size) - 1;
+            invalidate_in_region(view.projection_view, view.z_near, center, size, region_min, region_max, layer, mip, mip_table_size);
+        }
+        return;
+    }
 
     let mesh_instance = mesh_instances[dirty_mesh_instance_indices[mesh_index]];
     let transform = transforms[mesh_instance.transform_index];

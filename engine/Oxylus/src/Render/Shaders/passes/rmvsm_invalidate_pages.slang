@@ -13,6 +13,10 @@ import cull;
 [[vk::binding(4)]] StructuredBuffer<TransformWorld> transforms;
 [[vk::binding(5)]] StructuredBuffer<VirtualClipmap> clipmaps;
 [[vk::binding(6)]] StructuredBuffer<TransformPrevious> transforms_previous;
+// world-space boxes of mesh instances removed since last frame, as (center, size) pairs. A removed instance is in
+// no GPU buffer anymore, so without these the pages its shadow was drawn into would never be redrawn
+[[vk::binding(7)]] StructuredBuffer<f32x4> removed_bounds;
+[[vk::constant_id(60)]] const u32 INVALIDATE_FROM_BOUNDS = 0;
 
 constexpr static u32 INVALIDATE_PAGE_BLOCK_RESOLUTION = 8;
 
@@ -86,6 +90,17 @@ func cs_main(
 
     let section_min = i32x2(section_x, section_y) * i32(INVALIDATE_PAGE_BLOCK_RESOLUTION);
     let section_max = section_min + i32(INVALIDATE_PAGE_BLOCK_RESOLUTION - 1);
+
+    if (INVALIDATE_FROM_BOUNDS != 0) {
+        let clipmap = clipmaps[clipmap_index];
+        invalidate_in_section(
+          clipmap.projection_view_mat, clipmap.z_near,
+          removed_bounds[mesh_index * 2].xyz, removed_bounds[mesh_index * 2 + 1].xyz,
+          section_min, section_max,
+          i32(clipmap_index), ctx, clipmap
+        );
+        return;
+    }
 
     let mesh_instance = mesh_instances[dirty_mesh_instance_indices[mesh_index]];
     let transform = transforms[mesh_instance.transform_index];
