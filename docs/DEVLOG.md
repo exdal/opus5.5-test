@@ -250,3 +250,15 @@ One thing to watch out for: the ray comes back **pointing at the camera**. The f
 z=0 and z=1 as near and far, but the projection is reversed-z (`glm::perspective(fov, aspect, far,
 near)`), so they're the wrong way round (B17). A plane intersection solved for the whole line doesn't
 care; a "march forward from the origin" pick would find nothing.
+
+## Day 2: the sounds were too shrill
+
+"Sound effects are hurting my ears, they are too high pitched." Fair. I had designed them to be
+readable on a laptop speaker: a 2.2 kHz square-wave pager, a 1.2/2.75 kHz bell, a siren sweeping up to
+1.2 kHz with harmonics, square-wave horns, white-noise gunshots, all normalized to a 0.9 peak. On
+headphones that's harsh. The generator now keeps fundamentals below ~900 Hz, uses a few band-limited
+harmonics instead of square waves, low-passes everything (~1–3.5 kHz depending on the sound), fades in
+over 3 ms, and gives each sound its own peak level. Measured on the old and new files, the spectral
+centroid roughly halved (pager 3.4 kHz → 1.4 kHz, gunshot 3.9 kHz → 1.4 kHz) and the loud ones are
+5–11 dB quieter. Nothing about this is engine-specific; I hadn't listened with headphones, and
+headless I can't listen at all, so I measured instead.
