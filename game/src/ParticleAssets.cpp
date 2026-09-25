@@ -46,9 +46,24 @@ struct GraphBuilder {
 auto splat(f32 v) -> glm::vec4 { return glm::vec4(v); }
 auto size2(f32 v) -> glm::vec4 { return {v, v, 0.0f, 0.0f}; }
 
-// the shared update: gravity, colour over life from gradient 0, size over life from curve 0 times `base_size`
-auto add_common_update(ox::ParticleSystem& system, f32 gravity, f32 base_size) -> void {
+// the shared update: gravity (negative floats up, for smoke), drag, colour over life from gradient 0, size over life
+// from curve 0 times `base_size`
+auto add_common_update(ox::ParticleSystem& system, f32 gravity, f32 base_size, f32 drag = 0.0f) -> void {
   auto g = GraphBuilder{system.update_graph};
+  if (drag != 0.0f) {
+    // velocity += velocity * -drag * dt
+    const auto velocity = g.node(ParticleNodeType::ReadVelocity);
+    const auto k = g.node(ParticleNodeType::Constant, {splat(-drag)});
+    const auto dt = g.node(ParticleNodeType::ReadDeltaTime);
+    const auto scaled = g.node(ParticleNodeType::Multiply);
+    const auto step = g.node(ParticleNodeType::Multiply);
+    const auto add_velocity = g.node(ParticleNodeType::AddVelocity);
+    g.link(velocity, scaled, 0);
+    g.link(k, scaled, 1);
+    g.link(scaled, step, 0);
+    g.link(dt, step, 1);
+    g.link(step, add_velocity);
+  }
   if (gravity != 0.0f) {
     const auto accel = g.node(ParticleNodeType::Constant, {{0.0f, -gravity, 0.0f, 0.0f}});
     const auto dt = g.node(ParticleNodeType::ReadDeltaTime);
@@ -163,6 +178,108 @@ auto sparks(const ox::UUID& material) -> ox::ParticleSystem {
   return system;
 }
 
+auto explosion(const ox::UUID& material) -> ox::ParticleSystem {
+  // the fireball: big additive blobs thrown out fast, braked hard by drag, growing as they cool
+  auto system = ox::ParticleSystem{};
+  burst_emitter(system, 512, {0.35f, 0.8f}, ox::ParticleEmissionShape::Sphere, 0.8f);
+  system.render.material = material;
+  system.render.billboard = ox::ParticleBillboardMode::FaceCamera;
+  system.render.blend = ox::ParticleBlendMode::Additive;
+  system.render.sort = false;
+
+  system.curves.push_back({.name = "Size", .points = {{0.0f, 0.6f}, {0.25f, 1.2f}, {1.0f, 1.6f}}});
+  system.gradients.push_back({
+    .name = "Fire",
+    .keys = {{0.0f, {9.0f, 7.0f, 3.0f, 1.0f}},
+             {0.25f, {6.0f, 2.2f, 0.3f, 1.0f}},
+             {0.7f, {1.2f, 0.25f, 0.02f, 0.6f}},
+             {1.0f, {0.2f, 0.05f, 0.0f, 0.0f}}},
+  });
+  add_common_spawn(system, 3.0f, 9.0f, 1.0f);
+  add_common_update(system, -2.0f, 1.8f, 3.5f);
+  return system;
+}
+
+auto smoke(const ox::UUID& material) -> ox::ParticleSystem {
+  // thick, slow, rising; alpha blended and sorted so it layers over the street
+  auto system = ox::ParticleSystem{};
+  burst_emitter(system, 1024, {1.6f, 3.2f}, ox::ParticleEmissionShape::Sphere, 0.4f);
+  system.render.material = material;
+  system.render.billboard = ox::ParticleBillboardMode::FaceCamera;
+  system.render.blend = ox::ParticleBlendMode::AlphaBlend;
+  system.render.sort = true;
+
+  system.curves.push_back({.name = "Size", .points = {{0.0f, 0.4f}, {1.0f, 1.8f}}});
+  system.gradients.push_back({
+    .name = "Smoke",
+    .keys = {{0.0f, {0.05f, 0.045f, 0.04f, 0.0f}},
+             {0.1f, {0.06f, 0.055f, 0.05f, 0.75f}},
+             {1.0f, {0.18f, 0.18f, 0.18f, 0.0f}}},
+  });
+  add_common_spawn(system, 0.2f, 0.8f, 0.8f);
+  add_common_update(system, -1.6f, 1.6f, 0.8f);
+  return system;
+}
+
+auto tire_smoke(const ox::UUID& material) -> ox::ParticleSystem {
+  // pale, low, quick to spread and fade
+  auto system = ox::ParticleSystem{};
+  burst_emitter(system, 1024, {0.7f, 1.3f}, ox::ParticleEmissionShape::Hemisphere, 0.2f);
+  system.render.material = material;
+  system.render.billboard = ox::ParticleBillboardMode::FaceCamera;
+  system.render.blend = ox::ParticleBlendMode::AlphaBlend;
+  system.render.sort = true;
+
+  system.curves.push_back({.name = "Size", .points = {{0.0f, 0.4f}, {1.0f, 1.6f}}});
+  system.gradients.push_back({
+    .name = "Tire",
+    .keys = {{0.0f, {0.7f, 0.7f, 0.7f, 0.0f}}, {0.1f, {0.75f, 0.75f, 0.75f, 0.45f}}, {1.0f, {0.8f, 0.8f, 0.8f, 0.0f}}},
+  });
+  add_common_spawn(system, 0.3f, 1.2f, 0.6f);
+  add_common_update(system, -0.4f, 1.1f, 1.5f);
+  return system;
+}
+
+auto shell_casings(const ox::UUID& material) -> ox::ParticleSystem {
+  // brass flicked out to the side, bouncing off the pavement (depth collision)
+  auto system = ox::ParticleSystem{};
+  burst_emitter(system, 256, {1.2f, 1.8f}, ox::ParticleEmissionShape::Point, 0.0f);
+  system.render.material = material;
+  system.render.billboard = ox::ParticleBillboardMode::FaceCamera;
+  system.render.blend = ox::ParticleBlendMode::AlphaBlend;
+  system.render.sort = false;
+  system.render.depth_collision = true;
+  system.render.restitution = 0.35f;
+
+  system.curves.push_back({.name = "Size", .points = {{0.0f, 1.0f}, {1.0f, 1.0f}}});
+  system.gradients.push_back({
+    .name = "Brass",
+    .keys = {{0.0f, {1.6f, 1.1f, 0.3f, 1.0f}}, {0.8f, {0.9f, 0.6f, 0.15f, 1.0f}}, {1.0f, {0.9f, 0.6f, 0.15f, 0.0f}}},
+  });
+  add_common_spawn(system, 0.5f, 1.0f, 0.07f);
+  add_common_update(system, 9.8f, 0.07f);
+  return system;
+}
+
+auto cash_sparkle(const ox::UUID& material) -> ox::ParticleSystem {
+  // green glitter popping up out of a pickup
+  auto system = ox::ParticleSystem{};
+  burst_emitter(system, 256, {0.4f, 0.9f}, ox::ParticleEmissionShape::Hemisphere, 0.3f);
+  system.render.material = material;
+  system.render.billboard = ox::ParticleBillboardMode::FaceCamera;
+  system.render.blend = ox::ParticleBlendMode::Additive;
+  system.render.sort = false;
+
+  system.curves.push_back({.name = "Size", .points = {{0.0f, 1.0f}, {1.0f, 0.1f}}});
+  system.gradients.push_back({
+    .name = "Money",
+    .keys = {{0.0f, {1.5f, 6.0f, 1.8f, 1.0f}}, {1.0f, {0.3f, 2.0f, 0.4f, 0.0f}}},
+  });
+  add_common_spawn(system, 2.0f, 4.5f, 0.12f);
+  add_common_update(system, 5.0f, 0.14f, 1.0f);
+  return system;
+}
+
 // the particle material lives in fx.glb; its uuid is whatever the cooker assigned, read from the sidecar
 auto fx_material_uuid(const std::filesystem::path& assets_dir) -> ox::UUID {
   auto file = std::ifstream(assets_dir / "Models" / "Props" / "fx.glb.oxasset");
@@ -212,6 +329,11 @@ auto write_particle_assets(const std::filesystem::path& particles_dir) -> bool {
   write("blood_spray", blood_spray(material));
   write("muzzle_flash", muzzle_flash(material));
   write("sparks", sparks(material));
+  write("explosion", explosion(material));
+  write("smoke", smoke(material));
+  write("tire_smoke", tire_smoke(material));
+  write("shell_casings", shell_casings(material));
+  write("cash_sparkle", cash_sparkle(material));
   return ok;
 }
 } // namespace oxcity

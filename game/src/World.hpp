@@ -99,6 +99,7 @@ struct Ped {
   bool alive = true;
   f32 dead_time = 0.0f;
   f32 fall = 0.0f; // 0 standing, 1 lying flat
+  f32 drip_timer = 0.0f; // wounded peds leave a blood trail
 };
 
 struct Car {
@@ -118,6 +119,10 @@ struct Car {
   f32 health = 100.0f;
   f32 cruise_speed = 9.0f;
   bool alive = true;
+  bool exploded = false;
+  bool last_hit_by_player = false; // who gets the credit (and the combo) if it blows up
+  f32 smoke_timer = 0.0f;
+  f32 tire_timer = 0.0f;
   glm::vec3 last_velocity = {};
 };
 
@@ -164,6 +169,12 @@ struct Player {
 struct FxPool {
   std::vector<flecs::entity> emitters = {};
   usize next = 0;
+};
+
+// a short lived point light, the flash of an explosion
+struct FlashLight {
+  flecs::entity entity = {};
+  f32 life = 0.0f;
 };
 
 // the "game feel" state: kills freeze the world for a beat, shake the camera, flash the screen and feed the combo
@@ -226,6 +237,9 @@ struct HudData {
   f32 combo_tilt = 0.0f;     // degrees
   i32 score = 0;
   Rml::String score_popup = ""; // "+300"
+  bool settings_open = false;
+  bool sfx_on = true;
+  bool music_on = true;
 };
 
 // assets are looked up by source path once, then referenced by uuid
@@ -240,14 +254,18 @@ struct AssetTable {
   ox::UUID street_lamp = {}, tree = {}, ground = {};
   ox::UUID cash = {}, tracer = {}, marker = {}, knife = {};
   std::array<ox::UUID, 4> blood_decals = {};
+  std::array<ox::UUID, 2> scorch_decals = {};
+  std::array<ox::UUID, 4> blood_streaks = {}; // directional spatter, thrown along +z from the origin
 
   // particle systems (.oxparticle)
   ox::UUID fx_blood = {}, fx_muzzle = {}, fx_sparks = {};
+  ox::UUID fx_explosion = {}, fx_smoke = {}, fx_tire = {}, fx_casings = {}, fx_sparkle = {};
 
   // audio
   ox::UUID sfx_engine = {}, sfx_siren = {}, sfx_horn = {}, sfx_gunshot = {}, sfx_punch = {}, sfx_cash = {};
   ox::UUID sfx_footstep = {}, sfx_door = {}, sfx_crash = {}, sfx_alarm = {}, sfx_pager = {}, sfx_death = {};
-  ox::UUID sfx_radio = {}, sfx_knife_swing = {}, sfx_stab = {}, sfx_splat = {};
+  ox::UUID sfx_radio = {}, sfx_knife_swing = {}, sfx_stab = {}, sfx_splat = {}, sfx_explosion = {};
+  ox::UUID music_menu = {};
 };
 
 class World {
@@ -305,7 +323,7 @@ public:
   auto teleport_car(this World& self, CarID id, glm::vec2 position, f32 yaw) -> void;
   auto car_ai_follow_roads(this World& self, CarID id, f32 dt) -> void;
   auto car_ai_chase(this World& self, CarID id, glm::vec2 target, f32 dt) -> void;
-  auto damage_car(this World& self, CarID id, f32 amount) -> void;
+  auto damage_car(this World& self, CarID id, f32 amount, bool by_player = false) -> void;
 
   // --- peds (Peds.cpp) ---
   auto update_peds(this World& self, f32 dt) -> void;
@@ -329,10 +347,17 @@ public:
   auto emit(this World& self, FxPool& pool, glm::vec3 position, glm::vec3 velocity, u32 count) -> void;
   auto blood_burst(this World& self, glm::vec2 position, glm::vec2 direction, u32 count) -> void;
   auto blood_decal(this World& self, glm::vec2 position, f32 size) -> void;
+  auto blood_streak(this World& self, glm::vec2 position, glm::vec2 direction, f32 length, f32 width) -> void;
+  auto place_decal(this World& self, const ox::UUID& model, glm::vec2 position, f32 yaw, glm::vec3 scale) -> void;
   auto muzzle_flash(this World& self, glm::vec2 muzzle, f32 heading) -> void;
   auto impact_sparks(this World& self, glm::vec3 position, glm::vec2 direction) -> void;
   auto on_kill(this World& self, glm::vec2 position, glm::vec2 direction, bool by_player, bool big) -> void;
   auto sim_delta(this World& self, f32 real_dt) -> f32;
+  auto explode(this World& self, glm::vec2 position, bool by_player) -> void;
+  auto shell_casing(this World& self, glm::vec2 position, f32 heading) -> void;
+  auto cash_sparkle(this World& self, glm::vec2 position) -> void;
+  auto drill_sparks(this World& self, glm::vec2 position) -> void;
+  auto update_car_fx(this World& self, f32 dt) -> void;
 
   // --- camera (Camera.cpp) ---
   auto update_camera(this World& self, f32 dt) -> void;
@@ -346,6 +371,9 @@ public:
   auto init_audio(this World& self) -> void;
   auto play(this World& self, const ox::UUID& sound, f32 volume = 1.0f, f32 pitch = 1.0f) -> void;
   auto update_audio(this World& self, f32 dt) -> void;
+  // settings menu: sound effects and music on/off, kept in oxcity_settings.txt next to the game
+  auto load_settings(this World& self) -> void;
+  auto save_settings(this const World& self) -> void;
 
   std::unique_ptr<ox::Scene> scene;
   AssetTable assets = {};
@@ -378,8 +406,21 @@ public:
   FxPool fx_blood = {};
   FxPool fx_muzzle = {};
   FxPool fx_sparks = {};
-  std::vector<flecs::entity> decals = {};
-  usize next_decal = 0;
+  FxPool fx_explosion = {};
+  FxPool fx_smoke = {};
+  FxPool fx_tire = {};
+  FxPool fx_casings = {};
+  FxPool fx_sparkle = {};
+  std::vector<FlashLight> flashes = {};
+  usize next_flash = 0;
+  // decals are recycled per model, the oldest splat of a kind moves to where the newest one goes
+  struct DecalRing {
+    ox::UUID model = {};
+    std::vector<flecs::entity> entities = {};
+    usize next = 0;
+  };
+  std::vector<DecalRing> decal_rings = {};
+  usize decals_placed = 0;
   Juice juice = {};
 
   HudData hud = {};
@@ -397,6 +438,7 @@ public:
   bool siren_playing = false;
   bool radio_playing = false;
   bool alarm_playing = false;
+  bool menu_music_playing = false;
   bool phases_disabled = false;
 
   auto random_float(this World& self, f32 lo, f32 hi) -> f32;

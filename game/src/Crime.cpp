@@ -98,7 +98,7 @@ auto World::shoot(this World& self, glm::vec2 from, f32 heading, f32 damage, boo
         const auto local = p - self.car_position(id);
         const auto fwd = forward_of(self.car_heading(id));
         if (glm::abs(glm::dot(local, fwd)) < 2.3f && glm::abs(glm::dot(local, right_of(fwd))) < 1.0f) {
-          self.damage_car(id, damage * 0.3f);
+          self.damage_car(id, damage * 0.3f, by_player);
           sparks = true;
           if (c.player_inside && !by_player) {
             self.damage_player(damage * 0.4f);
@@ -314,6 +314,10 @@ auto World::update_crime(this World& self, const GameInput& input, f32 dt) -> vo
       }
       self.heist.progress += dt;
       self.hud.heist_active = true;
+      // the drill bites: sparks off the vault door every few frames
+      if (glm::fract(self.heist.progress * 12.0f) < glm::fract((self.heist.progress - dt) * 12.0f)) {
+        self.drill_sparks(self.heist.position + glm::vec2(0.0f, -0.6f));
+      }
       if (self.heist.progress >= HEIST_TIME) {
         const auto take = self.random_int(60, 120) * 100;
         self.player.cash += take;
@@ -349,6 +353,7 @@ auto World::update_crime(this World& self, const GameInput& input, f32 dt) -> vo
         self.player.ammo += pk.ammo;
       }
       self.play(self.assets.sfx_cash, 0.8f);
+      self.cash_sparkle(pk.position);
     } else if (pk.age > 90.0f) {
       pk.taken = true;
     }

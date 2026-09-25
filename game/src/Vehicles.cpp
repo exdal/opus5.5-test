@@ -89,9 +89,21 @@ auto World::teleport_car(this World& self, CarID id, glm::vec2 position, f32 yaw
   bi.SetLinearAndAngularVelocity(body->GetID(), JPH::Vec3::sZero(), JPH::Vec3::sZero());
 }
 
-auto World::damage_car(this World& self, CarID id, f32 amount) -> void {
+auto World::damage_car(this World& self, CarID id, f32 amount, bool by_player) -> void {
   auto& c = self.car(id);
+  if (!c.alive) {
+    return;
+  }
   c.health -= amount;
+  c.last_hit_by_player = c.last_hit_by_player || by_player;
+  if (c.health <= 0.0f && !c.exploded) {
+    // shot or smashed to pieces: it goes up. Marked first, the blast can reach this car again through a chain
+    c.exploded = true;
+    if (c.player_inside) {
+      self.damage_player(80.0f);
+    }
+    self.explode(self.car_position(id), c.last_hit_by_player);
+  }
   if (c.health <= 0.0f && c.role != CarRole::Abandoned) {
     // wrecked: engine dies, the driver bails
     c.health = 0.0f;
@@ -313,7 +325,10 @@ auto World::update_vehicles(this World& self, const GameInput& input, f32 dt) ->
     // crashes: a big change in velocity between frames
     const auto dv = glm::length(velocity - c.last_velocity);
     if (dv > 7.0f && glm::length(c.last_velocity) > 5.0f) {
-      self.damage_car(id, dv * 2.5f);
+      self.damage_car(id, dv * 2.5f, c.player_inside);
+      if (dv > 12.0f) {
+        self.impact_sparks(to3(pos, 0.6f), -to2(c.last_velocity));
+      }
       if (glm::distance(pos, self.player_position()) < 40.0f) {
         self.play(self.assets.sfx_crash, glm::clamp(dv / 20.0f, 0.3f, 1.0f));
       }

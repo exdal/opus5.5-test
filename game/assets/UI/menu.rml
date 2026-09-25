@@ -9,9 +9,23 @@
 		<div id="tagline" data-if="!paused">Steal cars. Rob banks. Don't get arrested.</div>
 		<div id="tagline" data-if="paused">- PAUSED -</div>
 
-		<button class="button" data-event-click="start" data-if="!paused">NEW GAME</button>
-		<button class="button" data-event-click="start" data-if="paused">RESUME</button>
-		<button class="button" data-event-click="quit">QUIT</button>
+		<div data-if="!settings_open">
+			<button class="button" data-event-click="start" data-if="!paused">NEW GAME</button>
+			<button class="button" data-event-click="start" data-if="paused">RESUME</button>
+			<button class="button" data-event-click="open_settings">SETTINGS</button>
+			<button class="button" data-event-click="quit">QUIT</button>
+		</div>
+
+		<div id="settings" data-if="settings_open">
+			<div id="settings-title">SETTINGS</div>
+			<button class="button toggle" data-class-off="!sfx_on" data-event-click="toggle_sfx">
+				SOUND EFFECTS: <span data-if="sfx_on">ON</span><span data-if="!sfx_on">OFF</span>
+			</button>
+			<button class="button toggle" data-class-off="!music_on" data-event-click="toggle_music">
+				MUSIC: <span data-if="music_on">ON</span><span data-if="!music_on">OFF</span>
+			</button>
+			<button class="button" data-event-click="close_settings">BACK</button>
+		</div>
 
 		<div id="controls">
 			WASD / ARROWS move &amp; drive &#160;&#160; SHIFT sprint &#160;&#160; SPACE handbrake<br/>

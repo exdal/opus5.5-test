@@ -15,9 +15,12 @@ target("OxCity")
     add_files(path.join(os.scriptdir(), "../engine/OxylusEditor/Assets/engine.toml"))
     add_rules("ox.compile_shaders", { output_dir = "Assets/Shaders" })
 
-    -- RmlUi documents, stylesheets and fonts are read straight from disk, copied next to the binary
-    -- audio is not packed by the cooker, the manifest points at the source .wav under the assets dir
-    add_files("assets/UI/**.rml", "assets/UI/**.rcss", "assets/Fonts/**.ttf", "assets/Audio/**.wav")
+    -- RmlUi documents, stylesheets and fonts are read straight from disk, copied next to the binary.
+    -- audio and particle systems are not packed by the cooker either: the manifest points at the source files under
+    -- the assets dir, so they have to be installed too. Without the .oxparticle files the engine quietly loads its
+    -- default (endlessly looping) particle system instead
+    add_files("assets/UI/**.rml", "assets/UI/**.rcss", "assets/Fonts/**.ttf", "assets/Audio/**.wav",
+              "assets/Particles/**.oxparticle")
     add_rules("ox.install_resources", { root_dir = path.join(os.scriptdir(), "assets"), output_dir = "Assets" })
 
     -- models and sounds go through the engine's cooker into Assets/.cooked + assets.oxmanifest

@@ -1,12 +1,15 @@
 // Sound through the engine's AudioEngine (miniaudio). Every effect is one audio asset, loaded once and kept
 // referenced for the whole game, played by restarting its ma_sound.
 
+#include <filesystem>
+#include <fstream>
 #include <glm/common.hpp>
 
 #include "Asset/AssetManager.hpp"
 #include "Asset/AudioSource.hpp"
 #include "Audio/AudioEngine.hpp"
 #include "Core/App.hpp"
+#include "Core/VFS.hpp"
 #include "Utils/Log.hpp"
 #include "World.hpp"
 
@@ -25,7 +28,7 @@ auto World::init_audio(this World& self) -> void {
   const auto& a = self.assets;
   for (const auto* uuid : {&a.sfx_engine, &a.sfx_siren, &a.sfx_horn, &a.sfx_gunshot, &a.sfx_punch, &a.sfx_cash,
                            &a.sfx_footstep, &a.sfx_door, &a.sfx_crash, &a.sfx_alarm, &a.sfx_pager, &a.sfx_death,
-                           &a.sfx_radio, &a.sfx_knife_swing, &a.sfx_stab, &a.sfx_splat}) {
+                           &a.sfx_radio, &a.sfx_knife_swing, &a.sfx_stab, &a.sfx_splat, &a.sfx_explosion, &a.music_menu}) {
     if (!*uuid || !asset_man.load_asset(*uuid)) {
       OX_LOG_WARN("OxCity: couldn't load a sound");
       continue;
@@ -36,7 +39,7 @@ auto World::init_audio(this World& self) -> void {
       audio.set_source_spatialization(sound, false);
     }
   }
-  for (const auto* uuid : {&a.sfx_engine, &a.sfx_siren, &a.sfx_radio, &a.sfx_alarm}) {
+  for (const auto* uuid : {&a.sfx_engine, &a.sfx_siren, &a.sfx_radio, &a.sfx_alarm, &a.music_menu}) {
     if (auto* sound = sound_of(*uuid)) {
       audio.set_source_looping(sound, true);
     }
@@ -44,6 +47,9 @@ auto World::init_audio(this World& self) -> void {
 }
 
 auto World::play(this World& self, const ox::UUID& sound_uuid, f32 volume, f32 pitch) -> void {
+  if (!self.hud.sfx_on) {
+    return;
+  }
   auto* sound = sound_of(sound_uuid);
   if (!sound) {
     return;
@@ -86,8 +92,12 @@ auto World::update_audio(this World& self, f32 dt) -> void {
     target_pitch = 0.6f + glm::fract(speed / 14.0f) * 0.9f + glm::floor(speed / 14.0f) * 0.12f;
   }
   self.engine_pitch += (target_pitch - self.engine_pitch) * glm::min(1.0f, dt * 6.0f);
-  set_loop(audio, self.assets.sfx_engine, self.engine_playing, in_car, 0.35f, self.engine_pitch);
-  set_loop(audio, self.assets.sfx_radio, self.radio_playing, in_car, 0.22f, 1.0f);
+  const auto sfx = self.hud.sfx_on;
+  const auto music = self.hud.music_on;
+  set_loop(audio, self.assets.sfx_engine, self.engine_playing, sfx && in_car, 0.35f, self.engine_pitch);
+  set_loop(audio, self.assets.sfx_radio, self.radio_playing, music && in_car, 0.22f, 1.0f);
+  const auto on_menu = self.state == GameState::MainMenu || self.state == GameState::Paused;
+  set_loop(audio, self.assets.music_menu, self.menu_music_playing, music && on_menu, 0.3f, 1.0f);
 
   // siren gets louder as the closest chasing cop car gets closer
   auto nearest = 1000.0f;
@@ -98,8 +108,28 @@ auto World::update_audio(this World& self, f32 dt) -> void {
     }
   }
   const auto siren = playing && self.stars() > 0 && nearest < 90.0f;
-  set_loop(audio, self.assets.sfx_siren, self.siren_playing, siren, glm::clamp(1.0f - nearest / 90.0f, 0.1f, 0.8f), 1.0f);
-  set_loop(audio, self.assets.sfx_alarm, self.alarm_playing, self.heist.alarm > 0.0f,
+  set_loop(audio, self.assets.sfx_siren, self.siren_playing, sfx && siren, glm::clamp(1.0f - nearest / 90.0f, 0.1f, 0.8f), 1.0f);
+  set_loop(audio, self.assets.sfx_alarm, self.alarm_playing, sfx && self.heist.alarm > 0.0f,
            glm::clamp(1.0f - glm::distance(self.player_position(), self.heist.position) / 80.0f, 0.05f, 0.7f), 1.0f);
+}
+static auto settings_path() -> std::filesystem::path {
+  return ox::App::get_vfs().resolve_physical_dir(ox::VFS::APP_DIR, "oxcity_settings.txt");
+}
+
+auto World::load_settings(this World& self) -> void {
+  auto file = std::ifstream(settings_path());
+  auto line = std::string{};
+  while (std::getline(file, line)) {
+    if (line.starts_with("sfx=")) {
+      self.hud.sfx_on = line != "sfx=0";
+    } else if (line.starts_with("music=")) {
+      self.hud.music_on = line != "music=0";
+    }
+  }
+}
+
+auto World::save_settings(this const World& self) -> void {
+  auto file = std::ofstream(settings_path());
+  file << "sfx=" << (self.hud.sfx_on ? 1 : 0) << "\n" << "music=" << (self.hud.music_on ? 1 : 0) << "\n";
 }
 } // namespace oxcity

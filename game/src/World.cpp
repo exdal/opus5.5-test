@@ -49,6 +49,8 @@ static auto runtime_models(const AssetTable& a) -> std::vector<ox::UUID> {
   auto models = std::vector<ox::UUID>(a.peds.begin(), a.peds.end());
   models.insert(models.end(), {a.cop, a.guard, a.sedan, a.sports, a.taxi, a.police, a.van, a.wheel, a.cash, a.tracer, a.marker, a.knife});
   models.insert(models.end(), a.blood_decals.begin(), a.blood_decals.end());
+  models.insert(models.end(), a.scorch_decals.begin(), a.scorch_decals.end());
+  models.insert(models.end(), a.blood_streaks.begin(), a.blood_streaks.end());
   return models;
 }
 
@@ -62,7 +64,7 @@ World::~World() {
     const auto& a = this->assets;
     for (const auto* uuid : {&a.sfx_engine, &a.sfx_siren, &a.sfx_horn, &a.sfx_gunshot, &a.sfx_punch, &a.sfx_cash,
                              &a.sfx_footstep, &a.sfx_door, &a.sfx_crash, &a.sfx_alarm, &a.sfx_pager, &a.sfx_death,
-                             &a.sfx_radio, &a.sfx_knife_swing, &a.sfx_stab, &a.sfx_splat}) {
+                             &a.sfx_radio, &a.sfx_knife_swing, &a.sfx_stab, &a.sfx_splat, &a.sfx_explosion, &a.music_menu}) {
       if (*uuid) {
         asset_man.unload_asset(*uuid);
       }
@@ -128,9 +130,20 @@ auto World::init(this World& self) -> bool {
   for (usize i = 0; i < a.blood_decals.size(); i++) {
     a.blood_decals[i] = find_asset(fmt::format("Models/Props/blood_{}.glb", i));
   }
+  for (usize i = 0; i < a.blood_streaks.size(); i++) {
+    a.blood_streaks[i] = find_asset(fmt::format("Models/Props/blood_streak_{}.glb", i));
+  }
   a.fx_blood = find_asset("Particles/blood_spray.oxparticle");
   a.fx_muzzle = find_asset("Particles/muzzle_flash.oxparticle");
   a.fx_sparks = find_asset("Particles/sparks.oxparticle");
+  a.fx_explosion = find_asset("Particles/explosion.oxparticle");
+  a.fx_smoke = find_asset("Particles/smoke.oxparticle");
+  a.fx_tire = find_asset("Particles/tire_smoke.oxparticle");
+  a.fx_casings = find_asset("Particles/shell_casings.oxparticle");
+  a.fx_sparkle = find_asset("Particles/cash_sparkle.oxparticle");
+  for (usize i = 0; i < a.scorch_decals.size(); i++) {
+    a.scorch_decals[i] = find_asset(fmt::format("Models/Props/scorch_{}.glb", i));
+  }
 
   a.sfx_engine = find_asset("Audio/engine_loop.wav");
   a.sfx_siren = find_asset("Audio/siren.wav");
@@ -148,6 +161,8 @@ auto World::init(this World& self) -> bool {
   a.sfx_knife_swing = find_asset("Audio/knife_swing.wav");
   a.sfx_stab = find_asset("Audio/stab.wav");
   a.sfx_splat = find_asset("Audio/splat.wav");
+  a.sfx_explosion = find_asset("Audio/explosion.wav");
+  a.music_menu = find_asset("Audio/menu_theme.wav");
 
   if (!a.player || !a.sedan || !a.road_straight) {
     OX_LOG_ERROR("OxCity: core assets are missing, was the game built with the ox.cook_assets rule?");
@@ -259,6 +274,7 @@ auto World::init(this World& self) -> bool {
   if (!self.init_hud()) {
     return false;
   }
+  self.load_settings();
   self.init_audio();
   self.init_fx();
 
@@ -343,6 +359,7 @@ auto World::update(this World& self, const GameInput& input, f32 real_dt) -> voi
   // the city keeps living behind the menus, it doubles as the title screen's attract mode
   if (self.state != GameState::Paused) {
     self.update_vehicles(input, dt);
+    self.update_car_fx(dt);
     self.update_peds(dt);
     self.update_crime(input, dt);
   }

@@ -257,3 +257,21 @@ body {
 	color: #19f0ff;
 	font-effect: outline(3dp #b0006a);
 }
+
+/* ---------- settings ---------- */
+
+#settings-title {
+	margin-bottom: 14dp;
+	font-size: 30dp;
+	font-weight: bold;
+	color: #19f0ff;
+	font-effect: outline(2dp #b0006a);
+	text-align: center;
+}
+.button.toggle {
+	width: 440dp;
+}
+.button.toggle.off {
+	color: #2a2a2a;
+	background-color: #7a7a7a;
+}

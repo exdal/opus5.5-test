@@ -220,6 +220,7 @@ auto World::player_attack(this World& self) -> void {
     p.ammo--;
     p.punch_anim = 0.6f;
     self.juice.shake = glm::min(1.0f, self.juice.shake + 0.12f);
+    self.shell_casing(p.position, p.heading);
     self.shoot(p.position + forward_of(p.heading) * 0.5f, p.heading, 50.0f, true);
     if (p.ammo == 0) {
       p.weapon = Weapon::Fists;

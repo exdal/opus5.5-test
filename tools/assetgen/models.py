@@ -171,7 +171,64 @@ def blood_splat_texture(seed: int, size: int = 128) -> bytes:
     return png_bytes(size, size, pixels)
 
 
+def blood_streak_texture(seed: int, width: int = 256, height: int = 128) -> bytes:
+    """directional spatter for alpha masking. u runs along the throw (0 = where the victim stood), v across it.
+    A pool at the start, long tapering streaks and a cone of droplets that get smaller and more stretched the
+    further they fly"""
+    import random
+
+    rng = random.Random(seed)
+    aspect = width / height  # droplets are round in world space, the quad is 2:1
+    ellipses = []  # (cu, cv, ru, rv) in uv space, axis aligned with the throw
+
+    # the pool: a few overlapping lumps near the start
+    for _ in range(6):
+        ellipses.append((rng.uniform(0.05, 0.16), 0.5 + rng.gauss(0.0, 0.05), rng.uniform(0.04, 0.08), rng.uniform(0.1, 0.2)))
+
+    # streaks: runs of shrinking lumps, each fanned out a little from the centre line
+    for _ in range(rng.randint(5, 8)):
+        angle = rng.gauss(0.0, 0.16)
+        length = rng.uniform(0.45, 0.92)
+        steps = 40
+        for k in range(steps):
+            t = k / steps
+            u = 0.12 + t * length
+            v = 0.5 + math.tan(angle) * (u - 0.1) * aspect * 0.5
+            thickness = (1.0 - t) ** 1.4 * 0.045 + 0.008
+            ellipses.append((u, v, 0.018, thickness))
+
+    # droplets: thrown in a widening cone, stretched along the throw, some with a thin tail pointing back
+    for _ in range(rng.randint(70, 110)):
+        t = rng.random() ** 0.7
+        u = 0.15 + t * 0.83
+        spread = 0.06 + t * 0.32
+        v = 0.5 + rng.gauss(0.0, spread * 0.5)
+        r = (1.0 - t) * 0.035 + 0.006 + rng.uniform(0.0, 0.01)
+        stretch = 1.0 + t * rng.uniform(1.0, 3.0)
+        ellipses.append((u, v, r * stretch / aspect, r))
+        if rng.random() < 0.35:
+            for k in range(1, 6):
+                ellipses.append((u - k * r * 0.5 / aspect, v, r * 0.6 / aspect, r * (1.0 - k / 6.0) * 0.5))
+
+    pixels = []
+    for y in range(height):
+        for x in range(width):
+            pu = (x + 0.5) / width
+            pv = (y + 0.5) / height
+            inside = False
+            for cu, cv, ru, rv in ellipses:
+                du = (pu - cu) / ru
+                dv = (pv - cv) / rv
+                if du * du + dv * dv < 1.0:
+                    inside = True
+                    break
+            shade = 200 + int(45 * (0.5 + 0.5 * math.sin(pu * 23.0 + pv * 11.0)))
+            pixels.append((shade, shade, shade, 255 if inside else 0))
+    return png_bytes(width, height, pixels)
+
+
 TEXTURES = {
+    **{f"blood_streak_{i}": (lambda i=i: blood_streak_texture(2000 + i)) for i in range(4)},
     "soft_dot": soft_dot_texture,
     **{f"blood_splat_{i}": (lambda i=i: blood_splat_texture(1000 + i)) for i in range(4)},
 }
@@ -792,6 +849,28 @@ def blood(variant: int) -> Node:
     return root
 
 
+def blood_streak(variant: int) -> Node:
+    """directional spatter: 1 m wide, 2 m long, starting at the origin and thrown along +z. The game yaws it to the
+    hit direction and stretches it with the force of the hit"""
+    root = Node(f"blood_streak_{variant}")
+    m = Mat(f"blood_streak_{variant}", srgb("#5a0404"), roughness=0.25, texture=f"blood_streak_{variant}", alpha_mode="MASK")
+    g = Geo()
+    # u runs along +z so the texture's throw lines up with the model's forward
+    g.quad((-0.5, 0.0, 0.0), (-0.5, 0.0, 2.0), (0.5, 0.0, 2.0), (0.5, 0.0, 0.0), (0, 1, 0))
+    root.add(g, m)
+    return root
+
+
+def scorch(variant: int) -> Node:
+    """burn mark an explosion leaves on the road, same splat masks as the blood, sooty and matte"""
+    root = Node(f"scorch_{variant}")
+    m = Mat(f"scorch_{variant}", srgb("#141210"), roughness=0.95, texture=f"blood_splat_{variant}", alpha_mode="MASK")
+    g = Geo()
+    g.quad((-0.5, 0.0, 0.5), (0.5, 0.0, 0.5), (0.5, 0.0, -0.5), (-0.5, 0.0, -0.5), (0, 1, 0))
+    root.add(g, m)
+    return root
+
+
 def knife() -> Node:
     """combat knife held in the fist: origin at the grip, blade along -y (down the arm) and forward. The game parents it
     to the right arm's hand"""
@@ -829,6 +908,10 @@ def all_models() -> dict[str, Node]:
     models["Props/marker"] = marker()
     models["Props/fx"] = fx()
     models["Props/knife"] = knife()
+    for i in range(2):
+        models[f"Props/scorch_{i}"] = scorch(i)
+    for i in range(4):
+        models[f"Props/blood_streak_{i}"] = blood_streak(i)
     for i in range(4):
         models[f"Props/blood_{i}"] = blood(i)
     return models

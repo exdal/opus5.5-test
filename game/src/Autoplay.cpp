@@ -381,9 +381,29 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
       if (at(2.56f)) {
         self.screenshot("muzzle_and_sparks");
       }
-      if (at(4.5f)) {
-        self.screenshot("blood_pools");
-        self.next(fmt::format("knife kills {}, combo score {}", world.stats.peds_killed, world.juice.score));
+      if (at(2.2f)) {
+        self.screenshot("blood_spatter");
+      }
+      // a car parked next to us, then blown up
+      if (at(3.0f)) {
+        for (usize i = 0; i < world.cars.size(); i++) {
+          const auto id = static_cast<CarID>(i);
+          if (world.cars[i].alive && !world.cars[i].player_inside && world.cars[i].driver == PedID::Invalid) {
+            world.teleport_car(id, me + glm::vec2(7.0f, 3.0f), 0.3f);
+            self.target_car = id;
+            break;
+          }
+        }
+      }
+      if (at(3.4f) && self.target_car != CarID::Invalid) {
+        world.damage_car(self.target_car, 500.0f, true);
+      }
+      if (at(3.55f)) {
+        self.screenshot("explosion");
+      }
+      if (at(6.0f)) {
+        self.screenshot("aftermath");
+        self.next(fmt::format("kills {}, combo score {}", world.stats.peds_killed, world.juice.score));
       }
       break;
     }

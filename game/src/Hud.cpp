@@ -76,6 +76,29 @@ auto World::init_hud(this World& self) -> bool {
   constructor.BindEventCallback("quit", [&self](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
     self.quit_requested = true;
   });
+
+  // settings: the panel replaces the menu's buttons while it's open; every toggle is saved straight away
+  constructor.Bind("settings_open", &h.settings_open);
+  constructor.Bind("sfx_on", &h.sfx_on);
+  constructor.Bind("music_on", &h.music_on);
+  constructor.BindEventCallback("open_settings", [&self](Rml::DataModelHandle model, Rml::Event&, const Rml::VariantList&) {
+    self.hud.settings_open = true;
+    model.DirtyVariable("settings_open");
+  });
+  constructor.BindEventCallback("close_settings", [&self](Rml::DataModelHandle model, Rml::Event&, const Rml::VariantList&) {
+    self.hud.settings_open = false;
+    model.DirtyVariable("settings_open");
+  });
+  constructor.BindEventCallback("toggle_sfx", [&self](Rml::DataModelHandle model, Rml::Event&, const Rml::VariantList&) {
+    self.hud.sfx_on = !self.hud.sfx_on;
+    model.DirtyVariable("sfx_on");
+    self.save_settings();
+  });
+  constructor.BindEventCallback("toggle_music", [&self](Rml::DataModelHandle model, Rml::Event&, const Rml::VariantList&) {
+    self.hud.music_on = !self.hud.music_on;
+    model.DirtyVariable("music_on");
+    self.save_settings();
+  });
   self.hud_model = std::make_unique<Rml::DataModelHandle>(constructor.GetModelHandle());
 
   self.hud_document = context->LoadDocument(ui_path("UI/hud.rml"));

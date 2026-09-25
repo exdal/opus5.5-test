@@ -115,8 +115,8 @@ auto World::damage_ped(this World& self, PedID id, f32 amount, glm::vec2 from, b
     return;
   }
   // wounded: a spurt, and a few drops on the pavement
-  self.blood_burst(p.position, dir, 24);
-  self.blood_decal(p.position + dir * 0.3f, self.random_float(0.5f, 0.8f));
+  self.blood_burst(p.position, dir, 45);
+  self.blood_streak(p.position, dir, self.random_float(1.2f, 2.0f), self.random_float(0.6f, 0.9f));
   // knock back a step
   const auto pushed = p.position + dir * 0.4f;
   if (!self.is_solid(pushed, PED_RADIUS)) {
@@ -169,6 +169,18 @@ auto World::update_peds(this World& self, f32 dt) -> void {
 
     if (p.kind == PedKind::Civilian) {
       civilians_alive++;
+    }
+
+    // wounded: a trail of drops wherever they go
+    if (p.health < (p.kind == PedKind::Civilian ? 40.0f : 80.0f)) {
+      p.drip_timer -= dt;
+      if (p.drip_timer <= 0.0f) {
+        p.drip_timer = self.random_float(0.25f, 0.5f);
+        self.blood_burst(p.position, p.velocity * 0.2f, 3);
+        if (self.random_float(0.0f, 1.0f) < 0.35f) {
+          self.blood_decal(p.position, self.random_float(0.25f, 0.45f));
+        }
+      }
     }
 
     auto desired = glm::vec2(0.0f);

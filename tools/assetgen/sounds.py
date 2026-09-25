@@ -264,6 +264,54 @@ def splat(rng) -> list[float]:
     return soft(out, 1800.0)
 
 
+def explosion(rng) -> list[float]:
+    # a deep boom with a rumbling tail; almost everything below 300 Hz
+    n = seconds(1.8)
+    nz = lowpass(noise(n, rng), 0.05)
+    out = []
+    for i in range(n):
+        t = i / RATE
+        boom = math.sin(2 * math.pi * (38.0 + 50.0 * math.exp(-t * 8.0)) * t) * math.exp(-t * 3.0)
+        crack = 2.5 * nz[i] * math.exp(-t * 14.0)
+        rumble = 1.6 * nz[i] * math.exp(-t * 1.8)
+        out.append(math.tanh(1.6 * (boom + crack + rumble)))
+    return soft(out, 900.0)
+
+
+def menu_theme(rng) -> list[float]:
+    """8 bar synthwave-ish loop for the title and pause screens, 100 bpm in A minor: a pulsing low bass, a slow
+    arpeggio and a soft pad. Nothing above ~2.5 kHz"""
+    bpm = 100.0
+    beat = 60.0 / bpm
+    n = seconds(beat * 4 * 8)
+    chords = [(45, 48, 52), (41, 45, 48), (43, 47, 50), (40, 44, 47)]  # Am F G E, two bars each
+
+    def freq(m):
+        return 440.0 * 2 ** ((m - 69) / 12)
+
+    out = [0.0] * n
+    for i in range(n):
+        t = i / RATE
+        bar = int(t / (beat * 4))
+        root, third, fifth = chords[(bar // 2) % len(chords)]
+        eighth = t % (beat / 2)
+        # bass pumping on eighths, ducked like a sidechain under a soft kick
+        duck = 1.0 - 0.6 * math.exp(-(t % beat) * 10.0)
+        s = 0.5 * tone(freq(root - 12), t, ((1, 1.0), (2, 0.35), (3, 0.1))) * math.exp(-eighth * 3.0) * duck
+        # arpeggio up and down the chord, one note per eighth, an octave up
+        step = int(t / (beat / 2)) % 6
+        note = (root, third, fifth, root + 12, fifth, third)[step] + 12
+        s += 0.16 * tone(freq(note), t, ((1, 1.0), (2, 0.2))) * math.exp(-eighth * 5.0)
+        # pad: the whole chord, slow swell per bar
+        swell = math.sin(math.pi * ((t % (beat * 4)) / (beat * 4)))
+        s += 0.08 * swell * sum(math.sin(2 * math.pi * freq(m) * t) for m in (root, third, fifth))
+        # kick
+        kick_t = t % beat
+        s += 0.5 * math.sin(2 * math.pi * (45.0 + 60.0 * math.exp(-kick_t * 35)) * kick_t) * math.exp(-kick_t * 12.0)
+        out[i] = s
+    return soft(out, 2500.0)
+
+
 def radio(rng) -> list[float]:
     """4 bar loop at 120bpm for the car radio, square bass softened, triangle lead"""
     bpm = 120.0
@@ -313,6 +361,8 @@ LEVELS = {
     "knife_swing": 0.45,
     "stab": 0.6,
     "splat": 0.5,
+    "explosion": 0.7,
+    "menu_theme": 0.4,
 }
 
 
@@ -336,6 +386,8 @@ def main():
         "knife_swing": knife_swing(rng),
         "stab": stab(rng),
         "splat": splat(rng),
+        "explosion": explosion(rng),
+        "menu_theme": menu_theme(rng),
     }
     for name, samples in sounds.items():
         path = out_dir / f"{name}.wav"
