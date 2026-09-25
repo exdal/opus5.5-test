@@ -182,9 +182,15 @@ vuk::Swapchain make_swapchain(
   VkSurfaceKHR surface,
   option<vuk::Swapchain> old_swapchain,
   vuk::PresentModeKHR present_mode,
-  u32 frame_count
+  u32 frame_count,
+  glm::ivec2 desired_extent
 ) {
   vkb::SwapchainBuilder swb(vkbdevice, surface);
+  // only used when the surface doesn't dictate its own extent (wayland, VK_EXT_headless_surface), vk-bootstrap
+  // would otherwise fall back to a 256x256 swapchain there
+  if (desired_extent.x > 0 && desired_extent.y > 0) {
+    swb.set_desired_extent(static_cast<u32>(desired_extent.x), static_cast<u32>(desired_extent.y));
+  }
   swb.set_desired_min_image_count(frame_count)
     .set_desired_format(
       vuk::SurfaceFormatKHR{.format = vuk::Format::eR8G8B8A8Srgb, .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear}
@@ -257,6 +263,12 @@ auto RenderContext::create_context(this RenderContext& self, const Window& windo
   if (vulkan_validation_layers) {
     OX_LOG_INFO("Enabled vulkan validation layers.");
     builder.request_validation_layers();
+  }
+
+  // whatever the window system needs to create a surface, vk-bootstrap only guesses the usual desktop ones and
+  // misses e.g. VK_EXT_headless_surface for SDL's offscreen driver
+  for (const auto* extension : Window::get_vulkan_instance_extensions()) {
+    builder.enable_extension(extension);
   }
 
   builder.enable_extension(VK_KHR_SURFACE_EXTENSION_NAME)
@@ -750,6 +762,12 @@ auto RenderContext::destroy_context(this RenderContext& self) -> void {
 auto RenderContext::handle_resize(u32 width, u32 height) -> void {
   wait();
 
+  // `width`/`height` are not trusted here: the present mode switch in new_frame passes 1x1, the window knows
+  auto extent = App::get_window().get_size_in_pixels();
+  if (extent.x <= 0 || extent.y <= 0) {
+    extent = glm::ivec2(static_cast<i32>(width), static_cast<i32>(height));
+  }
+
   swapchain = make_swapchain(
     *runtime,
     *superframe_allocator,
@@ -757,7 +775,8 @@ auto RenderContext::handle_resize(u32 width, u32 height) -> void {
     surface,
     std::move(swapchain),
     present_mode,
-    num_inflight_frames
+    num_inflight_frames,
+    extent
   );
 }
 
@@ -799,7 +818,8 @@ auto RenderContext::new_frame(this RenderContext& self) -> vuk::Value<vuk::Image
       self.surface,
       {},
       self.present_mode,
-      self.num_inflight_frames
+      self.num_inflight_frames,
+      App::get_window().get_size_in_pixels()
     );
   }
 

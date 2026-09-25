@@ -610,6 +610,16 @@ void Window::show_cursor(bool show) const {
   }
 }
 
+auto Window::get_vulkan_instance_extensions() -> std::span<const c8* const> {
+  u32 count = 0;
+  const auto* extensions = SDL_Vulkan_GetInstanceExtensions(&count);
+  if (!extensions) {
+    LOG_SDL_ERROR(SDL_Vulkan_GetInstanceExtensions);
+    return {};
+  }
+  return {extensions, count};
+}
+
 auto Window::get_surface(VkInstance instance) const -> VkSurfaceKHR {
   VkSurfaceKHR surface = {};
   if (!SDL_Vulkan_CreateSurface(impl->handle, instance, nullptr, &surface)) {

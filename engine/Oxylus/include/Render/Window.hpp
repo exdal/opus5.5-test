@@ -129,6 +129,8 @@ struct Window : Handle<Window> {
   auto show_cursor(bool show) const -> void;
 
   auto get_surface(VkInstance instance) const -> VkSurfaceKHR;
+  // instance extensions the window system needs for `get_surface`, e.g. xlib, wayland or headless
+  static auto get_vulkan_instance_extensions() -> std::span<const c8* const>;
 
   auto get_size_in_pixels() const -> glm::ivec2;
   auto get_logical_size() const -> glm::ivec2;
