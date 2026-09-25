@@ -159,6 +159,39 @@ as the proper upstream fix, when that differs from what I did.
   problem is that GPU-side state is synced in module `update`, which depends on module order. Any
   asset loaded from a later module (the editor included) has the same one-frame gap.
 
+### 11. Model refcounts: one ref per MeshComponent, and unloading doesn't unregister
+- **Files:** `Oxylus/src/Scene/Scene.cpp` (`spawn_model_mesh_entity`, `create_model_entity`,
+  `update_pending_model_spawns`), `Oxylus/src/Asset/AssetManager.cpp` (`release_ref`)
+- **Symptom:** the game crashed on the project owner's machine right after being arrested, just as
+  the player respawned. The respawn clears the wanted level, and the next frame despawns every police
+  car and cop. Older headless logs also showed `Cannot import an invalid model '<tracer uuid>'` for
+  every shot after the first tracer had faded out.
+- **Cause, part 1 (unbalanced refs):** `create_model_entity` takes **one** ref on the model (through
+  `load_asset`), and the async path takes one per hierarchy, but the `MeshComponent` OnRemove
+  observer releases **one per mesh entity**. A cop has a mesh per limb, so destroying the first cop
+  drops the cop model to zero and unloads it while the other cops still draw it.
+  `Scene::prepare_render` then does `asset_man.get_model(uuid)->gpu_meshes[...]` on a null model
+  (its own comment in `attach_mesh` says "rendering assumes every mesh instance has a loaded
+  model").
+- **Cause, part 2 (unload = delete):** when a refcount reached zero, `release_ref` **erased the
+  registry entry**, not just the loaded data. The asset then no longer exists: `load_asset` fails,
+  and `find_asset` still returns the uuid because the source index isn't cleaned up. So even a
+  balanced model (the single-mesh tracer) couldn't be spawned again once its last instance was gone.
+- **Change:**
+  - `spawn_model_mesh_entity` acquires a ref for the `MeshComponent` it writes, matching the
+    observer. That's the convention the particle observer already documents: "whoever writes the
+    uuid owns the ref".
+  - `create_model_entity` hands back its `load_asset` ref once mesh entities hold theirs. It keeps
+    the ref if the model spawned no meshes, since dropping it would unload the model under the new
+    hierarchy.
+  - The async path no longer takes a per-hierarchy ref.
+  - `release_ref` resets the entry to "not loaded" (`model_id = Invalid`, which is the union's id)
+    instead of erasing it. `delete_asset` is still the one that erases, and it also unindexes the
+    source.
+- **Upstream suggestion:** take both parts. Also consider making `prepare_render` skip (and log) a
+  mesh instance whose model isn't loaded instead of dereferencing null; that would have turned this
+  into a missing mesh plus a log line instead of a crash.
+
 ## Validation status
 
 Run on lavapipe with Khronos validation 1.3.275 (`tools/run_headless.sh --validation`), 200 frames
