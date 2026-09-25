@@ -216,7 +216,9 @@ loaded after startup. The chain from there:
    index. Radv hangs. Lavapipe shrugs and draws the next frame correctly.
 
 The fix is one line in `RendererInstance::update`: sync materials right before acquiring the buffer
-(patch 10). The comment above it said "already synced by the renderer", which is only true if nothing
+(patch 10). A headless run with a log line in that spot confirmed the timing: on the frame of the
+mugging, the global material count went from 128 to 131 *inside the render path*. Before the patch,
+those three materials would have reached the GPU one frame late. The comment above it said "already synced by the renderer", which is only true if nothing
 loads a model after the Renderer's update. That's what every game does.
 
 What I'd take away as an engine user: **ordering by module registration is invisible API.** Nothing in
