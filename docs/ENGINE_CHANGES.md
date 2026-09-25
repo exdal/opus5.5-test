@@ -163,9 +163,13 @@ as the proper upstream fix, when that differs from what I did.
 - **Files:** `Oxylus/src/Scene/Scene.cpp` (`spawn_model_mesh_entity`, `create_model_entity`,
   `update_pending_model_spawns`), `Oxylus/src/Asset/AssetManager.cpp` (`release_ref`)
 - **Symptom:** the game crashed on the project owner's machine right after being arrested, just as
-  the player respawned. The respawn clears the wanted level, and the next frame despawns every police
-  car and cop. Older headless logs also showed `Cannot import an invalid model '<tracer uuid>'` for
-  every shot after the first tracer had faded out.
+  the player respawned. The respawn clears the wanted level, and the next frames despawn the police
+  cars and cops that are far enough away. Older headless logs also showed `Cannot import an invalid
+  model '<tracer uuid>'` for every shot after the first tracer had faded out; that part is confirmed.
+  The crash itself is **not reproduced**: a headless arrest → respawn on the unpatched build ran
+  cleanly. Part 1 below only crashes when *some* instances of a model are destroyed while others stay
+  alive. In the scripted run every cop and police car was out of range and went in the same frame,
+  so no instance was left to dereference the unloaded model. It's the prime suspect, not a proven cause.
 - **Cause, part 1 (unbalanced refs):** `create_model_entity` takes **one** ref on the model (through
   `load_asset`), and the async path takes one per hierarchy, but the `MeshComponent` OnRemove
   observer releases **one per mesh entity**. A cop has a mesh per limb, so destroying the first cop
