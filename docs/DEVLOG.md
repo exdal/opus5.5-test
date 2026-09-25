@@ -155,3 +155,33 @@ ctor.BindEventCallback("start", [&](Rml::DataModelHandle, Rml::Event&, const Rml
 HUD, the heist progress bar and the menus without a single DOM lookup. The engine routes mouse
 input to the view under the cursor, and the menu buttons just work. Two small gaps: no VFS-aware
 file interface (I resolve real paths) and no default font (the game loads FiraSans itself).
+
+---
+
+## Day 1, evening: the validation pass
+
+The project owner built the repo on a machine with a real GPU and got a validation error from
+`scene.slang` (`OpLogicalNot` on a `uint`) and a **device lost**. Lavapipe had happily run all of it.
+I pulled Ubuntu's Khronos validation layers into the sandbox (`tools/run_headless.sh --validation`)
+and went through every message:
+
+- **The shader error** was a one-line fix: `!(flags & X)` becomes `(flags & X) == MaterialFlag::None`.
+- **13 images were cleared without `TRANSFER_DST` usage.** `vuk::clear_image` is a transfer command,
+  and images created `Storage | Sampled` "just work" on lavapipe. A small script that pairs every
+  `clear_image(x)` with `x`'s declaration found them all. Color and depth attachments are fine,
+  because vuk clears those through load ops.
+- **FSR3 sampled three history images in the wrong layout, every frame.** The history is re-acquired
+  with `acquire_ia(..., eComputeSampled)`, but the previous frame left it as a storage write
+  (`GENERAL`). Finding it meant logging `Texture::create` handles to rule out persistent textures,
+  then matching the ping-pong handle pattern to FSR3's allocation order. That was the most
+  interesting bug of the day, and FSR3 is on by default. It's my prime suspect for the device lost.
+
+After that, 200 validated frames show no usage or layout errors. The only remaining messages are
+Slang-generated SPIR-V the old spirv-val dislikes and a descriptor set layout leaked at shutdown
+(ENGINE_CHANGES.md, "Validation status").
+
+The same session's full autoplay run also caught a gameplay-breaking engine bug: every **parked car
+was undrivable**. The autoplay stole one, floored it, and logged "drove 0 m". Jolt had put the
+parked chassis to sleep, and the engine's wake-up (writing the velocity through
+`MotionProperties`) doesn't activate a body. Traffic never noticed because it never stops long
+enough to sleep. Fixed with `BodyInterface::ActivateBody` (patch 9).

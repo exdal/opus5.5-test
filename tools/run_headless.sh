@@ -20,10 +20,25 @@ if [ ! -f "$BIN_DIR/context_config.toml" ]; then
 fi
 
 export SDL_VIDEO_DRIVER=offscreen
+
+# --validation: khronos validation layers from the sandbox (see bootstrap.sh), passed on as the engine's own flag
+validation=()
+for a in "$@"; do
+  if [ "$a" = "--validation" ]; then
+    VVL="$OXCITY_SANDBOX/sysroot-vvl"
+    export VK_LAYER_PATH="$VVL/usr/share/vulkan/explicit_layer.d"
+    export LD_LIBRARY_PATH="$VVL/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+    validation=(--vulkan-validation)
+  fi
+done
 cd "$BIN_DIR"
 # relative screenshot dirs are relative to where the script was called from
 args=()
 while [ $# -gt 0 ]; do
+  if [ "$1" = "--validation" ]; then
+    shift
+    continue
+  fi
   if [ "$1" = "--screenshots" ] && [ $# -gt 1 ]; then
     case "$2" in /*) args+=("$1" "$2") ;; *) args+=("$1" "$OLDPWD/$2") ;; esac
     shift 2
@@ -32,4 +47,4 @@ while [ $# -gt 0 ]; do
     shift
   fi
 done
-exec ./OxCity --width 960 --height 540 "${args[@]}"
+exec ./OxCity --width 960 --height 540 "${validation[@]}" "${args[@]}"

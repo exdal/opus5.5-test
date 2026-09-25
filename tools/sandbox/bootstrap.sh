@@ -55,6 +55,14 @@ if [ ! -f "$SB/sysroot/usr/lib/x86_64-linux-gnu/libvulkan_lvp.so" ]; then
   for d in "$SB"/debs/*.deb; do dpkg -x "$d" "$SB/sysroot"; done
 fi
 
+# vulkan validation layers + spirv tools, for `tools/run_headless.sh --validation`
+if [ ! -f "$SB/sysroot-vvl/usr/lib/x86_64-linux-gnu/libVkLayer_khronos_validation.so" ]; then
+  APT=(-o "Dir::State::Lists=$SB/apt/lists" -o "Dir::Cache=$SB/apt/cache" -o Debug::NoLocking=1 -o APT::Sandbox::User=root)
+  mkdir -p "$SB/debs-vvl" "$SB/sysroot-vvl"
+  (cd "$SB/debs-vvl" && apt-get "${APT[@]}" download vulkan-validationlayers spirv-tools)
+  for d in "$SB"/debs-vvl/*.deb; do dpkg -x "$d" "$SB/sysroot-vvl"; done
+fi
+
 cat > "$SB/lvp_icd.json" <<JSON
 { "ICD": { "api_version": "1.4.318", "library_path": "$SB/sysroot/usr/lib/x86_64-linux-gnu/libvulkan_lvp.so" },
   "file_format_version": "1.0.1" }

@@ -24,6 +24,9 @@ miniaudio and asset cooking. It ran headless on llvmpipe with 4 CPU cores.
 | B8 | Low | `BoxColliderComponent` ignores the entity's world scale, while Sphere/Capsule/Cylinder use it. Sphere/Capsule/Cylinder also use `2 * radius * scale` as the radius, so a "radius 0.5" sphere is 1 m in radius. The components are inconsistent with each other and with their names. | `Scene::create_shape` | noted |
 | B9 | Low | `Scene::cast_ray` only runs a **broad phase** query (AABB hits, no hit fraction or normal). Anything like a bullet needs `get_physics_system()->GetNarrowPhaseQuery()` directly. | `Scene::cast_ray` | worked around (game does its own hitscan) |
 | B10 | Low | One Material asset with refcount 1 is reported "still alive" at every shutdown, even with nothing else leaked. | AssetManager deinit | noted, not investigated |
+| B12 | High | **Vulkan validation errors in the renderer**: invalid SPIR-V in `scene.slang` (`!` on a uint), 13 images cleared without `TRANSFER_DST` usage, and FSR3 history images sampled in the wrong layout every frame (wrong `last_access` on `acquire_ia`). The project owner hit a device lost on a real GPU. | `scene.slang`, `RendererInstance.cpp`, `Passes/*` | **fixed locally** (patches 6-8) |
+| B13 | High | A parked (sleeping) Jolt vehicle **can never be driven off**: waking it through `MotionProperties` doesn't activate the body. | `Scene.cpp` `vehicle_input` | **fixed locally** (patch 9) |
+| B14 | Low | Culling shaders fail the 1.3.275 spirv-val (`AliasedPointer`/`RestrictPointer` missing on function-local PSB pointer variables), and one descriptor set layout leaks at shutdown. | Slang codegen, RenderContext | noted |
 | B11 | Cosmetic | First run logs `ERR File error: Unknown, Path: context_config.toml`. A missing config on first launch is normal, it shouldn't be an error. | `ContextCVar::load` | noted |
 
 ## Missing features / API friction (ranked)
@@ -87,6 +90,15 @@ miniaudio and asset cooking. It ran headless on llvmpipe with 4 CPU cores.
   and slip queries show the direction is right.
 - **The module system** (`App::with<T>(args...)`, `module_dependencies`, `update(Timestep)`) is small
   and pleasant. The whole game is one module.
+
+## Debugging notes
+
+- `--vulkan-validation` is built into the engine, which is great. With validation on, the engine's
+  own shaders and renderer produced errors on the very first frame (B12). It would pay to run the
+  editor with validation in CI, even on lavapipe: everything in B12 reproduces there with no GPU.
+- `acquire_ia(name, image, last_access)` is the easiest vuk API to get wrong: `last_access` means
+  "how the previous frame left it", not "how I'm about to use it". A comment, or a helper that
+  records the real last access at the end of the frame, would prevent the FSR3 class of bug.
 
 ## Build and platform notes
 

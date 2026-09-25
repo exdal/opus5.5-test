@@ -91,3 +91,64 @@ as the proper upstream fix, when that differs from what I did.
   world transform each frame.
 - **Upstream suggestion:** take it. The game itself plays 2D sounds straight through `AudioEngine`, so
   this fix isn't exercised by OxCity. I only found it while reading the system.
+
+### 6. Invalid SPIR-V in `scene.slang`
+- **File:** `Oxylus/src/Render/Shaders/scene.slang` (`sample_tangent_normal`)
+- **Symptom (reported on a real GPU with validation on):** `VUID-VkShaderModuleCreateInfo-pCode-08737`,
+  `Expected bool scalar or vector type as Result Type: LogicalNot`. The code was
+  `if (!(this.flags & MaterialFlag::HasNormalImage))`, which Slang lowers to `OpLogicalNot` on a `u32`.
+- **Change:** `if ((this.flags & MaterialFlag::HasNormalImage) == MaterialFlag::None)`.
+- **Upstream suggestion:** take it. It was the only `!` applied to an integer in the shaders
+  (grepped). A spirv-val step in the shader build (`rcli`) would catch the next one at compile time.
+
+### 7. `TRANSFER_DST` usage on every image that `vuk::clear_image` touches
+- **Files:** `Oxylus/src/Render/RendererInstance.cpp`, `Passes/PBR.cpp`, `Passes/PostProcess.cpp`
+- **Symptom:** `VUID-vkCmdClearColorImage-image-00002` and `VUID-VkImageMemoryBarrier2-oldLayout-01213`.
+  `vuk::clear_image` records `vkCmdClearColorImage`, but these images were created `Storage | Sampled`
+  only. That's undefined behaviour, and a likely device-lost candidate on real drivers.
+- **Change:** `eTransferDst` added to the sky transmittance/multiscatter LUTs, sky cubemap, sky view
+  LUT, sky aerial perspective, both VSM virtual page tables, hiz, the three vbgtao images, and bloom
+  downsampled/upsampled (including the 1x1 "bloom disabled" image). Color/depth attachments didn't
+  need it: vuk clears those through the render pass load op.
+- **Upstream suggestion:** take it. Better still, have vuk (or an engine helper around `clear_image`)
+  add `eTransferDst` itself, since this is easy to forget.
+
+### 8. FSR3 history: transfer usage and the right `last_access`
+- **File:** `Oxylus/src/Render/Passes/FSR3.cpp`
+- **Symptom:**
+  - The same missing `TRANSFER_DST` on the history targets, which are cleared on reset.
+  - Every frame, `UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout` on three images: expected
+    `READ_ONLY_OPTIMAL`, actual `GENERAL`. `vuk::acquire_ia(name, ia, last_access)` must describe how
+    the *previous* frame left the image. All four histories were acquired as `eComputeSampled`, but
+    color, accumulation and luma history are last *written* as storage (`GENERAL`). vuk therefore
+    skipped the transition and they were sampled in the wrong layout every frame. Luma is last read,
+    so `eComputeSampled` is right for it.
+- **Change:** `eTransferDst` added to the history usage and to `new_locks`. `acquire_or_clear` takes
+  a per-image `last_access`: `eComputeWrite` for color, accumulation and luma history,
+  `eComputeSampled` for luma.
+- **Upstream suggestion:** take it. FSR3 is the default upscaler, so this runs on every frame of
+  every scene, and it's my best guess for the device lost the project owner saw.
+
+### 9. Wake sleeping vehicles properly
+- **File:** `Oxylus/src/Scene/Scene.cpp` (`vehicle_input` system)
+- **Symptom:** a car that had been standing still long enough for Jolt to put it to sleep could
+  never be driven again. The system tried to wake it with
+  `GetMotionProperties()->SetLinearVelocity(GetLinearVelocity())`, which doesn't activate a body. In
+  OxCity every parked car you steal was stuck at 0 km/h, while traffic (never asleep) drove fine.
+- **Change:** `BodyInterface::ActivateBody` when there's throttle or steering input, which is what
+  Jolt's own vehicle samples do. Brake or handbrake alone doesn't wake it, so parked cars holding the
+  handbrake still sleep.
+
+## Validation status
+
+Run on lavapipe with Khronos validation 1.3.275 (`tools/run_headless.sh --validation`), 200 frames
+covering the menu, gameplay and driving. After patches 6–8 no image usage or layout errors remain.
+What's left:
+- `VUID-VkPipelineShaderStageCreateInfo-pSpecializationInfo-06849` x5 on the culling compute
+  pipelines: `OpVariable ... expected AliasedPointer or RestrictPointer for PhysicalStorageBuffer
+  pointer`. These are function-local variables holding buffer device address pointers (one is a
+  `u16x4*`). They come from Slang's codegen rather than from something written in the engine source,
+  so they're **not patched here**. Worth checking with the current SDK's spirv-val and a current Slang.
+- `VUID-vkDestroyDevice-device-05137`: one `VkDescriptorSetLayout` is never destroyed at shutdown.
+- `VUID-VkDeviceCreateInfo-pNext-pNext` (unknown struct type 55): these validation layers are older
+  than the Vulkan headers the engine uses. Not an engine bug.
