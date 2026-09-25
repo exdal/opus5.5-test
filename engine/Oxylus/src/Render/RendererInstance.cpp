@@ -2412,7 +2412,11 @@ auto RendererInstance::update(this RendererInstance& self, RendererInstanceUpdat
     "transforms_previous",
     "update transform previous"
   );
-  // Materials are global and already synced by the renderer; this instance only reads them.
+  // Materials are global and synced by the renderer, but `Renderer::update` runs before any module registered
+  // after it. A model loaded in a game module's update would otherwise be drawn this frame with material indices
+  // past the end of the GPU buffer (or into uninitialized slack), which hangs AMD GPUs. Syncing is a no-op when
+  // nothing is dirty.
+  self.renderer.sync_materials();
   self.prepared_frame.materials_buffer = self.renderer.get_materials_buffer();
 
   {
