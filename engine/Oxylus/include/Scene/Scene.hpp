@@ -113,6 +113,9 @@ public:
   auto runtime_start(this Scene& self) -> void;
   auto runtime_stop(this Scene& self) -> void;
   auto runtime_update(this Scene& self, const Timestep& delta_time) -> void;
+  // same, for callers that step with their own (e.g. fixed) delta. not an overload of runtime_update so
+  // bindings can keep taking &Scene::runtime_update
+  auto runtime_step(this Scene& self, f32 delta_seconds) -> void;
 
   auto prepare_render(this Scene& self) -> void;
 

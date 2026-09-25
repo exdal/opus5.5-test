@@ -843,7 +843,17 @@ auto Scene::init(this Scene& self, const std::string& name) -> void {
       OX_CHECK_NULL(self.physics_system);
       auto& p = App::mod<Physics>();
       p.debug_renderer->begin_step(self.debug_renderer, physics_debug_draw_enabled(self));
-      self.physics_system->Update(self.physics_interval, 1, p.get_temp_allocator(), p.get_job_system());
+      // an interval tick source fires at most once per progress(), so below 60 fps a single step would run the
+      // simulation in slow motion. catch up with as many fixed substeps as time has passed, capped so a long
+      // hitch doesn't spiral
+      const auto elapsed = static_cast<f32>(it.delta_system_time());
+      const auto steps = glm::clamp(static_cast<i32>(std::round(elapsed / self.physics_interval)), 1, 4);
+      self.physics_system->Update(
+        self.physics_interval * static_cast<f32>(steps),
+        steps,
+        p.get_temp_allocator(),
+        p.get_job_system()
+      );
       p.debug_renderer->end_step();
     });
 
@@ -1148,6 +1158,10 @@ auto Scene::runtime_stop(this Scene& self) -> void {
 }
 
 auto Scene::runtime_update(this Scene& self, const Timestep& delta_time) -> void {
+  self.runtime_step(static_cast<f32>(delta_time.get_seconds()));
+}
+
+auto Scene::runtime_step(this Scene& self, f32 delta_seconds) -> void {
   ZoneScoped;
 
   self.run_deferred_functions();
@@ -1161,12 +1175,12 @@ auto Scene::runtime_update(this Scene& self, const Timestep& delta_time) -> void
   auto on_update_phase_enabled = !self.world.entity(flecs::OnUpdate).has(flecs::Disabled);
   if (pre_update_phase_enabled && on_update_phase_enabled) {
     for (auto& [_, system] : self.lua_systems) {
-      system->on_scene_update(&self, static_cast<f32>(delta_time.get_seconds()));
+      system->on_scene_update(&self, delta_seconds);
     }
   }
 
-  // TODO: Pass our delta_time?
-  self.world.progress();
+  // the caller's clock, not flecs' own: a game stepping with a fixed delta gets timers and physics that agree
+  self.world.progress(delta_seconds);
 
   if (physics_debug_draw_enabled(self)) {
     App::mod<Physics>().debug_renderer->draw(*self.physics_system, self.debug_renderer);
