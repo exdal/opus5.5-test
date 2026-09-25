@@ -196,6 +196,37 @@ as the proper upstream fix, when that differs from what I did.
   mesh instance whose model isn't loaded instead of dereferencing null; that would have turned this
   into a missing mesh plus a log line instead of a crash.
 
+### 12. Destroying an empty `Texture` needs no renderer
+- **File:** `Oxylus/src/Asset/Texture.cpp` (`Texture::destroy`)
+- **Symptom:** OxCity builds its particle graphs with `ParticleGraph` and writes them with
+  `ParticleSystem::write` from a tool mode that doesn't start the App. It segfaulted as soon as the
+  first `ParticleSystem` went out of scope: `~ParticleSystem` → `~Texture` (the never-created
+  `curve_atlas`) → `destroy()` → `App::get_rendercontext()` on a null App.
+- **Change:** `destroy()` returns early when the texture holds no image, view or sampler.
+- **Upstream suggestion:** take it. Any asset type with a `Texture` member (particle systems, materials)
+  becomes usable in tools, tests and after-renderer teardown.
+
+### 13. VSM: invalidate the pages of destroyed mesh instances
+- **Files:** `Oxylus/src/Render/Shaders/passes/rmvsm_invalidate_pages.slang`,
+  `rmvsm_pointspot_invalidate_pages.slang`, `Oxylus/src/Render/Passes/Shadowmaps.cpp`,
+  `Oxylus/src/Scene/Scene.cpp` (MeshComponent OnRemove observer, `prepare_render`),
+  `Scene.hpp`, `RendererInstance.hpp/.cpp`
+- **Symptom (reported by the project owner):** bullet tracer shadows never went away. Each 80 ms
+  tracer left its shadow baked into the sun's shadow map (and the street lamps').
+- **Cause:** RMVSM caches shadow pages and only redraws pages that are invalidated. Invalidation is
+  driven by *dirty* mesh instances (moved, or newly attached through `set_dirty`), using their previous
+  and current transforms. A destroyed instance is in no GPU buffer anymore and never becomes dirty,
+  so the pages its shadow was drawn into are never redrawn.
+- **Change:** when a `MeshComponent` is removed, the Scene records the entity's last world AABB
+  (`removed_mesh_bounds`, as center/size pairs). `prepare_render` hands them to the renderer instance,
+  which uploads them. Both invalidate shaders gained a specialization constant
+  (`INVALIDATE_FROM_BOUNDS`, id 60) and a bounds buffer; in that mode they project the world box with
+  the clipmap's (or light view's) own matrix instead of reading an instance. `Shadowmaps.cpp` runs one
+  extra dispatch per light type when anything was removed. The instance passes bind a placeholder to
+  the new slot.
+- **Upstream suggestion:** take it, or fold removal into the existing pass by giving it a list of
+  world boxes for both cases (moved instances could contribute their previous box the same way).
+
 ## Validation status
 
 Run on lavapipe with Khronos validation 1.3.275 (`tools/run_headless.sh --validation`), 200 frames
