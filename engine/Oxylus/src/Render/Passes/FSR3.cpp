@@ -22,7 +22,9 @@ auto RendererInstance::allocate_fsr3_resources(
 
   auto allocate = [&](FSR3History& target, const vuk::Extent3D extent, const vuk::Format format) {
     target.attachment = vuk::ImageAttachment{
-      .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled,
+      // transfer dst: a history reset clears these with vuk::clear_image (vkCmdClearColorImage)
+      .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled |
+               vuk::ImageUsageFlagBits::eTransferDst,
       .extent = extent,
       .format = format,
       .sample_count = vuk::Samples::e1,
@@ -133,7 +135,7 @@ auto RendererInstance::apply_fsr3(this RendererInstance& self, FSR3Context& cont
   // cleared rather than left over from last frame
   auto new_locks = vuk::declare_ia(
     "fsr3 new locks",
-    {.usage = vuk::ImageUsageFlagBits::eStorage,
+    {.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eTransferDst,
      .extent = display_extent,
      .format = vuk::Format::eR8Unorm,
      .sample_count = vuk::Samples::e1,
@@ -165,17 +167,23 @@ auto RendererInstance::apply_fsr3(this RendererInstance& self, FSR3Context& cont
 
   // on a reset there is no meaningful previous frame; clear the far side of the ping-pong and let
   // the frame_index == 0 path in the shaders reject it anyway
-  auto acquire_or_clear = [&](FSR3History& target, const char* name) {
+  // `last_access` is how the *previous* frame left each image. color, accumulation and luma history are last
+  // written by a compute pass (storage, GENERAL), luma is last read (sampled). acquiring everything as
+  // eComputeSampled made vuk skip the GENERAL -> read transition and sample three of them in the wrong layout
+  // every frame (UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout)
+  auto acquire_or_clear = [&](FSR3History& target, const char* name, vuk::Access last_access) {
     if (context.reset) {
       return vuk::clear_image(vuk::discard_ia(name, target.attachment), vuk::Black<f32>);
     }
-    return vuk::acquire_ia(name, target.attachment, vuk::eComputeSampled);
+    return vuk::acquire_ia(name, target.attachment, last_access);
   };
 
-  auto internal_upscaled_color_prev = acquire_or_clear(self.fsr3_internal_upscaled_color[previous], "fsr3 prev color");
-  auto accumulation_prev = acquire_or_clear(self.fsr3_accumulation[previous], "fsr3 prev accumulation");
-  auto previous_luma = acquire_or_clear(self.fsr3_luma[previous], "fsr3 prev luma");
-  auto luma_history_prev = acquire_or_clear(self.fsr3_luma_history[previous], "fsr3 prev luma history");
+  auto internal_upscaled_color_prev =
+    acquire_or_clear(self.fsr3_internal_upscaled_color[previous], "fsr3 prev color", vuk::eComputeWrite);
+  auto accumulation_prev = acquire_or_clear(self.fsr3_accumulation[previous], "fsr3 prev accumulation", vuk::eComputeWrite);
+  auto previous_luma = acquire_or_clear(self.fsr3_luma[previous], "fsr3 prev luma", vuk::eComputeSampled);
+  auto luma_history_prev =
+    acquire_or_clear(self.fsr3_luma_history[previous], "fsr3 prev luma history", vuk::eComputeWrite);
 
   auto luma_instability = declare_render_ia("fsr3 luma instability", vuk::Format::eR16Sfloat);
 
