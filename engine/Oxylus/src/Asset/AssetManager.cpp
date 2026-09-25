@@ -436,7 +436,9 @@ auto AssetManager::release_ref(this AssetManager& self, ReadGuard<Asset> asset) 
 
       removed_type = it->second.type;
       removed_id = std::to_underlying(it->second.model_id);
-      self.asset_registry.erase(it);
+      // unloading is not deleting: the entry (and its source index) has to survive, or the next
+      // `load_asset`/`find_asset` of a perfectly good file fails. `delete_asset` is what erases.
+      it->second.model_id = ModelID::Invalid;
     }
 
     self.unload_asset_impl(removed_type, removed_id);

@@ -1550,6 +1550,10 @@ auto Scene::resolve_mesh_spawn(this Scene& self, Model& model, const PendingMode
 auto Scene::spawn_model_mesh_entity(this Scene& self, const UUID& model_uuid, const MeshSpawnInfo& info) -> void {
   ZoneScoped;
 
+  // whoever writes the uuid owns the ref: the MeshComponent OnRemove observer releases one per mesh entity
+  auto& asset_man = App::mod<AssetManager>();
+  asset_man.acquire_ref(asset_man.get_asset(model_uuid));
+
   auto entity = self.create_entity(self.safe_entity_name(info.name, info.parent), false);
   entity.set<TransformComponent>({});
   entity.set<MeshComponent>({
@@ -1600,6 +1604,12 @@ auto Scene::create_model_entity(this Scene& self, const UUID& asset_uuid) -> fle
 
   for (const auto& mesh_spawn : mesh_spawns) {
     self.spawn_model_mesh_entity(asset_uuid, mesh_spawn);
+  }
+
+  // the mesh entities hold their own refs now, so hand back the one `load_asset` took. A model with no
+  // meshes keeps it, dropping it would unload the model under the hierarchy that was just spawned.
+  if (!mesh_spawns.empty()) {
+    asset_man.unload_asset(asset_uuid);
   }
 
   return root_entity;
@@ -1664,7 +1674,6 @@ auto Scene::update_pending_model_spawns(this Scene& self) -> void {
     auto& spawn = *it;
     auto mesh_spawns = std::vector<MeshSpawnInfo>();
     auto fully_loaded = false;
-    auto hierarchy_just_spawned = false;
 
     {
       auto model = asset_man.get_model(spawn.model_uuid);
@@ -1684,7 +1693,6 @@ auto Scene::update_pending_model_spawns(this Scene& self) -> void {
       if (!spawn.hierarchy_spawned) {
         std::ignore = self.spawn_model_hierarchy(*model.value, spawn);
         spawn.hierarchy_spawned = true;
-        hierarchy_just_spawned = true;
       }
 
       for (auto mesh_it = spawn.mesh_entities.begin(); mesh_it != spawn.mesh_entities.end();) {
@@ -1696,10 +1704,6 @@ auto Scene::update_pending_model_spawns(this Scene& self) -> void {
         mesh_spawns.emplace_back(self.resolve_mesh_spawn(*model.value, *mesh_it));
         mesh_it = spawn.mesh_entities.erase(mesh_it);
       }
-    }
-
-    if (hierarchy_just_spawned) {
-      asset_man.acquire_ref(asset_man.get_asset(spawn.model_uuid));
     }
 
     for (const auto& mesh_spawn : mesh_spawns) {
