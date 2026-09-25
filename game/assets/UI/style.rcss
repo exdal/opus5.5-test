@@ -210,3 +210,50 @@ body {
 	font-size: 15dp;
 	color: #9fe39f;
 }
+
+/* ---------- kill feedback, Hotline Miami flavoured: hot pink and cyan, tilted, loud ---------- */
+
+#kill-flash {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: #ff1030;
+	pointer-events: none;
+}
+
+#combo {
+	position: absolute;
+	top: 24%;
+	left: 0;
+	width: 100%;
+	text-align: center;
+	font-size: 64dp;
+	font-weight: bold;
+	color: #ff2a8a;
+	font-effect: outline(4dp #19f0ff);
+	transform-origin: 50% 50%;
+}
+
+#score-popup {
+	position: absolute;
+	top: 34%;
+	left: 0;
+	width: 100%;
+	text-align: center;
+	font-size: 34dp;
+	font-weight: bold;
+	color: #fff04a;
+	font-effect: outline(3dp #b0006a);
+}
+
+#score {
+	position: absolute;
+	top: 124dp;
+	right: 26dp;
+	font-size: 26dp;
+	font-weight: bold;
+	color: #19f0ff;
+	font-effect: outline(3dp #b0006a);
+}

@@ -47,7 +47,8 @@ static auto find_asset(std::string_view relative) -> ox::UUID {
 // whole session keeps them resident.
 static auto runtime_models(const AssetTable& a) -> std::vector<ox::UUID> {
   auto models = std::vector<ox::UUID>(a.peds.begin(), a.peds.end());
-  models.insert(models.end(), {a.cop, a.guard, a.sedan, a.sports, a.taxi, a.police, a.van, a.wheel, a.cash, a.tracer, a.marker});
+  models.insert(models.end(), {a.cop, a.guard, a.sedan, a.sports, a.taxi, a.police, a.van, a.wheel, a.cash, a.tracer, a.marker, a.knife});
+  models.insert(models.end(), a.blood_decals.begin(), a.blood_decals.end());
   return models;
 }
 
@@ -61,7 +62,7 @@ World::~World() {
     const auto& a = this->assets;
     for (const auto* uuid : {&a.sfx_engine, &a.sfx_siren, &a.sfx_horn, &a.sfx_gunshot, &a.sfx_punch, &a.sfx_cash,
                              &a.sfx_footstep, &a.sfx_door, &a.sfx_crash, &a.sfx_alarm, &a.sfx_pager, &a.sfx_death,
-                             &a.sfx_radio}) {
+                             &a.sfx_radio, &a.sfx_knife_swing, &a.sfx_stab, &a.sfx_splat}) {
       if (*uuid) {
         asset_man.unload_asset(*uuid);
       }
@@ -123,6 +124,13 @@ auto World::init(this World& self) -> bool {
   a.cash = find_asset("Models/Props/cash.glb");
   a.tracer = find_asset("Models/Props/tracer.glb");
   a.marker = find_asset("Models/Props/marker.glb");
+  a.knife = find_asset("Models/Props/knife.glb");
+  for (usize i = 0; i < a.blood_decals.size(); i++) {
+    a.blood_decals[i] = find_asset(fmt::format("Models/Props/blood_{}.glb", i));
+  }
+  a.fx_blood = find_asset("Particles/blood_spray.oxparticle");
+  a.fx_muzzle = find_asset("Particles/muzzle_flash.oxparticle");
+  a.fx_sparks = find_asset("Particles/sparks.oxparticle");
 
   a.sfx_engine = find_asset("Audio/engine_loop.wav");
   a.sfx_siren = find_asset("Audio/siren.wav");
@@ -137,6 +145,9 @@ auto World::init(this World& self) -> bool {
   a.sfx_pager = find_asset("Audio/pager.wav");
   a.sfx_death = find_asset("Audio/death.wav");
   a.sfx_radio = find_asset("Audio/radio.wav");
+  a.sfx_knife_swing = find_asset("Audio/knife_swing.wav");
+  a.sfx_stab = find_asset("Audio/stab.wav");
+  a.sfx_splat = find_asset("Audio/splat.wav");
 
   if (!a.player || !a.sedan || !a.road_straight) {
     OX_LOG_ERROR("OxCity: core assets are missing, was the game built with the ox.cook_assets rule?");
@@ -249,6 +260,7 @@ auto World::init(this World& self) -> bool {
     return false;
   }
   self.init_audio();
+  self.init_fx();
 
   self.scene->runtime_start();
   self.set_state(GameState::MainMenu);
@@ -269,6 +281,7 @@ auto World::start_game(this World& self) -> void {
   self.player.weapon = Weapon::Pistol;
   self.wanted = {};
   self.stats = {};
+  self.juice = {};
   self.set_state(GameState::Playing);
   self.pager("WELCOME TO OXCITY. THE BANK ON THE NORTH SIDE IS RIPE. STEAL A CAR, GET RICH.");
 }
@@ -285,8 +298,11 @@ auto World::set_state(this World& self, GameState state) -> void {
   }
 }
 
-auto World::update(this World& self, const GameInput& input, f32 dt) -> void {
+auto World::update(this World& self, const GameInput& input, f32 real_dt) -> void {
   ZoneScoped;
+
+  // hit-stop slows the simulation for a few frames after a kill; the camera, HUD and audio keep real time
+  const auto dt = self.sim_delta(real_dt);
 
   self.time += dt;
   self.state_timer += dt;
@@ -330,8 +346,9 @@ auto World::update(this World& self, const GameInput& input, f32 dt) -> void {
     self.update_peds(dt);
     self.update_crime(input, dt);
   }
-  self.update_camera(dt);
-  self.update_audio(dt);
+  self.update_fx(real_dt);
+  self.update_camera(real_dt);
+  self.update_audio(real_dt);
   self.update_hud();
 
   // the paused world still has to reach the renderer (and RmlUi still needs its update), it just doesn't

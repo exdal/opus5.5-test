@@ -35,6 +35,7 @@ private:
   glm::vec2 last_car_position = {};
   PedID victim = PedID::Invalid;
   CarID target_car = CarID::Invalid;
+  flecs::entity probe = {};
   NodeID drive_target = NodeID::Invalid;
   std::vector<std::string> log = {};
 

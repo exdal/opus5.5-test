@@ -53,11 +53,15 @@ auto World::shoot(this World& self, glm::vec2 from, f32 heading, f32 damage, boo
   constexpr f32 RANGE = 38.0f;
   constexpr f32 STEP = 0.25f;
 
+  self.muzzle_flash(from + dir * 0.2f, heading);
+
   auto end = from + dir * RANGE;
+  auto sparks = false; // walls and cars throw sparks, people bleed (damage_ped)
   for (f32 t = 0.0f; t < RANGE; t += STEP) {
     const auto p = from + dir * t;
     if (self.is_solid(p, 0.0f)) {
       end = p;
+      sparks = true;
       break;
     }
 
@@ -71,7 +75,7 @@ auto World::shoot(this World& self, glm::vec2 from, f32 heading, f32 damage, boo
       if (!by_player && ped.kind != PedKind::Civilian) {
         continue;
       }
-      self.damage_ped(static_cast<PedID>(i), damage, from);
+      self.damage_ped(static_cast<PedID>(i), damage, from, by_player);
       if (by_player) {
         self.commit_crime(ped.kind == PedKind::Civilian ? 0.4f : 1.2f, from, "");
       }
@@ -95,6 +99,7 @@ auto World::shoot(this World& self, glm::vec2 from, f32 heading, f32 damage, boo
         const auto fwd = forward_of(self.car_heading(id));
         if (glm::abs(glm::dot(local, fwd)) < 2.3f && glm::abs(glm::dot(local, right_of(fwd))) < 1.0f) {
           self.damage_car(id, damage * 0.3f);
+          sparks = true;
           if (c.player_inside && !by_player) {
             self.damage_player(damage * 0.4f);
           }
@@ -111,6 +116,9 @@ auto World::shoot(this World& self, glm::vec2 from, f32 heading, f32 damage, boo
   }
 
   self.spawn_tracer(to3(from, 1.25f), to3(end, 1.1f));
+  if (sparks) {
+    self.impact_sparks(to3(end, BULLET_HEIGHT), -dir);
+  }
   const auto dist = glm::distance(from, self.player_position());
   self.play(self.assets.sfx_gunshot, glm::clamp(1.0f - dist / 60.0f, 0.1f, 1.0f), self.random_float(0.92f, 1.08f));
   if (by_player) {

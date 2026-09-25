@@ -63,7 +63,7 @@ struct GameInput {
 
 // --- gameplay objects -----------------------------------------------------------------------------------------------
 
-enum class Weapon : u8 { Fists = 0, Pistol };
+enum class Weapon : u8 { Fists = 0, Knife, Pistol };
 enum class PedKind : u8 { Civilian = 0, Cop, Guard };
 enum class PedState : u8 { Wander = 0, Flee, Chase, Attack, Dead, Driving, Idle };
 enum class CarRole : u8 { Parked = 0, Traffic, Police, Abandoned };
@@ -156,6 +156,25 @@ struct Player {
   f32 footstep_timer = 0.0f;
   f32 punch_anim = 0.0f;
   f32 invulnerable = 0.0f;
+  flecs::entity knife = {}; // blade model in the right hand, parked out of sight unless the knife is out
+};
+
+// a few emitter entities per effect, used round robin so bursts in different places in the same frame don't
+// drag each other's position around
+struct FxPool {
+  std::vector<flecs::entity> emitters = {};
+  usize next = 0;
+};
+
+// the "game feel" state: kills freeze the world for a beat, shake the camera, flash the screen and feed the combo
+struct Juice {
+  f32 hitstop = 0.0f;    // seconds of near-frozen simulation left
+  f32 shake = 0.0f;      // trauma, 0..1; the camera offset goes with its square
+  f32 flash = 0.0f;      // red screen flash, 0..1
+  i32 combo = 0;         // kills in a row, each within COMBO_WINDOW of the last
+  f32 combo_timer = 0.0f;
+  f32 combo_pop = 0.0f;  // 1 on a new kill, eases back to 0; drives the HUD text's punch
+  i32 score = 0;
 };
 
 struct Wanted {
@@ -201,6 +220,12 @@ struct HudData {
   i32 speed = 0; // km/h
   i32 multiplier = 1;
   Rml::String stats = "";
+  f32 kill_flash = 0.0f;     // opacity of the red overlay
+  Rml::String combo = "";    // "3X COMBO", empty hides it
+  f32 combo_scale = 1.0f;
+  f32 combo_tilt = 0.0f;     // degrees
+  i32 score = 0;
+  Rml::String score_popup = ""; // "+300"
 };
 
 // assets are looked up by source path once, then referenced by uuid
@@ -213,12 +238,16 @@ struct AssetTable {
   ox::UUID road_straight = {}, road_cross = {}, block = {}, park = {}, bank = {}, vault_door = {};
   std::array<ox::UUID, 6> buildings = {};
   ox::UUID street_lamp = {}, tree = {}, ground = {};
-  ox::UUID cash = {}, tracer = {}, marker = {};
+  ox::UUID cash = {}, tracer = {}, marker = {}, knife = {};
+  std::array<ox::UUID, 4> blood_decals = {};
+
+  // particle systems (.oxparticle)
+  ox::UUID fx_blood = {}, fx_muzzle = {}, fx_sparks = {};
 
   // audio
   ox::UUID sfx_engine = {}, sfx_siren = {}, sfx_horn = {}, sfx_gunshot = {}, sfx_punch = {}, sfx_cash = {};
   ox::UUID sfx_footstep = {}, sfx_door = {}, sfx_crash = {}, sfx_alarm = {}, sfx_pager = {}, sfx_death = {};
-  ox::UUID sfx_radio = {};
+  ox::UUID sfx_radio = {}, sfx_knife_swing = {}, sfx_stab = {}, sfx_splat = {};
 };
 
 class World {
@@ -280,8 +309,8 @@ public:
 
   // --- peds (Peds.cpp) ---
   auto update_peds(this World& self, f32 dt) -> void;
-  auto kill_ped(this World& self, PedID id, glm::vec2 impulse) -> void;
-  auto damage_ped(this World& self, PedID id, f32 amount, glm::vec2 from) -> void;
+  auto kill_ped(this World& self, PedID id, glm::vec2 impulse, bool by_player = false) -> void;
+  auto damage_ped(this World& self, PedID id, f32 amount, glm::vec2 from, bool by_player = false) -> void;
   auto panic_around(this World& self, glm::vec2 position, f32 radius) -> void;
   auto animate_limbs(this World& self, Limbs& limbs, f32 phase, f32 amount, f32 punch) -> void;
 
@@ -293,6 +322,17 @@ public:
   auto kill_player(this World& self) -> void;
   auto respawn_player(this World& self) -> void;
   auto shoot(this World& self, glm::vec2 from, f32 heading, f32 damage, bool by_player) -> void;
+
+  // --- blood, particles and game feel (Fx.cpp) ---
+  auto init_fx(this World& self) -> void;
+  auto update_fx(this World& self, f32 real_dt) -> void;
+  auto emit(this World& self, FxPool& pool, glm::vec3 position, glm::vec3 velocity, u32 count) -> void;
+  auto blood_burst(this World& self, glm::vec2 position, glm::vec2 direction, u32 count) -> void;
+  auto blood_decal(this World& self, glm::vec2 position, f32 size) -> void;
+  auto muzzle_flash(this World& self, glm::vec2 muzzle, f32 heading) -> void;
+  auto impact_sparks(this World& self, glm::vec3 position, glm::vec2 direction) -> void;
+  auto on_kill(this World& self, glm::vec2 position, glm::vec2 direction, bool by_player, bool big) -> void;
+  auto sim_delta(this World& self, f32 real_dt) -> f32;
 
   // --- camera (Camera.cpp) ---
   auto update_camera(this World& self, f32 dt) -> void;
@@ -334,6 +374,13 @@ public:
   flecs::entity camera = {};
   glm::vec3 camera_position = {};
   f32 camera_height = 26.0f;
+
+  FxPool fx_blood = {};
+  FxPool fx_muzzle = {};
+  FxPool fx_sparks = {};
+  std::vector<flecs::entity> decals = {};
+  usize next_decal = 0;
+  Juice juice = {};
 
   HudData hud = {};
   std::unique_ptr<Rml::DataModelHandle> hud_model;

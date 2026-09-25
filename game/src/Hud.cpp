@@ -21,6 +21,7 @@ static auto ui_path(std::string_view relative) -> std::string {
 static auto weapon_name(Weapon w) -> Rml::String {
   switch (w) {
     case Weapon::Fists : return "FISTS";
+    case Weapon::Knife : return "KNIFE";
     case Weapon::Pistol: return "PISTOL";
   }
   return "";
@@ -63,6 +64,12 @@ auto World::init_hud(this World& self) -> bool {
   constructor.Bind("paused", &h.paused);
   constructor.Bind("speed", &h.speed);
   constructor.Bind("stats", &h.stats);
+  constructor.Bind("kill_flash", &h.kill_flash);
+  constructor.Bind("combo", &h.combo);
+  constructor.Bind("combo_scale", &h.combo_scale);
+  constructor.Bind("combo_tilt", &h.combo_tilt);
+  constructor.Bind("score", &h.score);
+  constructor.Bind("score_popup", &h.score_popup);
   constructor.BindEventCallback("start", [&self](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
     self.start_requested = true;
   });

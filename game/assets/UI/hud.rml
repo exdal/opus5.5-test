@@ -4,6 +4,13 @@
 	<link type="text/rcss" href="style.rcss"/>
 </head>
 <body data-model="hud">
+	<!-- Hotline style kill feedback: a red wash over everything, then the combo and the points -->
+	<div id="kill-flash" data-style-opacity="kill_flash"></div>
+	<div id="combo" data-if="combo != '' &amp;&amp; !menu_visible"
+		data-style-transform="'rotate(' + combo_tilt + 'deg) scale(' + combo_scale + ')'">{{ combo }}</div>
+	<div id="score-popup" data-if="score_popup != '' &amp;&amp; !menu_visible">{{ score_popup }}</div>
+	<div id="score" data-if="score > 0 &amp;&amp; !menu_visible">{{ score }} PTS</div>
+
 	<div id="money" data-if="!menu_visible">${{ money }}</div>
 
 	<div id="stars" data-if="!menu_visible">

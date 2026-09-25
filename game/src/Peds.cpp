@@ -79,11 +79,13 @@ auto World::panic_around(this World& self, glm::vec2 position, f32 radius) -> vo
   }
 }
 
-auto World::kill_ped(this World& self, PedID id, glm::vec2 impulse) -> void {
+auto World::kill_ped(this World& self, PedID id, glm::vec2 impulse, bool by_player) -> void {
   auto& p = self.ped(id);
   if (!p.alive) {
     return;
   }
+  // run overs (big impulse) get the bigger splash
+  self.on_kill(p.position, impulse, by_player, glm::length(impulse) > 6.0f);
   p.alive = false;
   p.state = PedState::Dead;
   p.health = 0.0f;
@@ -100,7 +102,7 @@ auto World::kill_ped(this World& self, PedID id, glm::vec2 impulse) -> void {
   self.panic_around(p.position, 18.0f);
 }
 
-auto World::damage_ped(this World& self, PedID id, f32 amount, glm::vec2 from) -> void {
+auto World::damage_ped(this World& self, PedID id, f32 amount, glm::vec2 from, bool by_player) -> void {
   auto& p = self.ped(id);
   if (!p.alive) {
     return;
@@ -109,9 +111,12 @@ auto World::damage_ped(this World& self, PedID id, f32 amount, glm::vec2 from) -
   const auto away = p.position - from;
   const auto dir = glm::length2(away) > 0.001f ? glm::normalize(away) : glm::vec2(0.0f, 1.0f);
   if (p.health <= 0.0f) {
-    self.kill_ped(id, dir * 5.0f);
+    self.kill_ped(id, dir * 5.0f, by_player);
     return;
   }
+  // wounded: a spurt, and a few drops on the pavement
+  self.blood_burst(p.position, dir, 24);
+  self.blood_decal(p.position + dir * 0.3f, self.random_float(0.5f, 0.8f));
   // knock back a step
   const auto pushed = p.position + dir * 0.4f;
   if (!self.is_solid(pushed, PED_RADIUS)) {

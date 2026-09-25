@@ -36,9 +36,19 @@ auto World::update_camera(this World& self, f32 dt) -> void {
   }
   self.camera_position += (desired - self.camera_position) * smooth;
 
+  // screen shake: trauma squared, so small hits barely move it and kills kick hard. Sines at unrelated frequencies
+  // stand in for noise and don't touch the gameplay rng. A kill also punches the camera in a little
+  const auto trauma = self.juice.shake * self.juice.shake;
+  const auto t = self.time;
+  const auto shake = glm::vec3(std::sin(t * 47.0f) + std::sin(t * 83.0f) * 0.5f, 0.0f, std::sin(t * 59.0f + 1.3f) + std::sin(t * 97.0f) * 0.5f) *
+                     trauma * 0.55f;
+  const auto punch = glm::vec3(0.0f, -self.juice.combo_pop * 2.0f, 0.0f);
+  const auto eye = self.camera_position + shake + punch;
+
   // almost straight down, tilted just enough that screen up is world -z (see update_player)
-  const auto look = glm::normalize(target - self.camera_position);
-  const auto rotation = glm::quatLookAt(look, glm::vec3(0.0f, 1.0f, 0.0f));
-  self.set_entity_pose(self.camera, self.camera_position, rotation);
+  const auto look = glm::normalize(target + shake * 0.5f - eye);
+  const auto roll = glm::angleAxis(std::sin(t * 71.0f) * trauma * 0.04f, look);
+  const auto rotation = roll * glm::quatLookAt(look, glm::vec3(0.0f, 1.0f, 0.0f));
+  self.set_entity_pose(self.camera, eye, rotation);
 }
 } // namespace oxcity

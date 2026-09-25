@@ -37,6 +37,10 @@ class Mat:
     roughness: float = 0.8
     emissive: tuple[float, float, float] = (0.0, 0.0, 0.0)
     emissive_strength: float = 1.0
+    # name of a generated texture (see TEXTURES) used as the base colour map, and the glTF alpha mode
+    texture: str | None = None
+    alpha_mode: str = "OPAQUE"
+    alpha_cutoff: float = 0.5
 
 
 def srgb(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
@@ -93,6 +97,84 @@ SIREN_RED = mat("siren_red", "#7a0000", emissive="#ff1010", strength=8.0)
 SIREN_BLUE = mat("siren_blue", "#00167a", emissive="#1030ff", strength=8.0)
 BLACK = mat("black", "#151515")
 VAULT = mat("vault", "#8d9299", metallic=0.9, roughness=0.35)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# textures: tiny procedural RGBA images, embedded into the glb as PNG
+
+
+def png_bytes(width: int, height: int, pixels: list[tuple[int, int, int, int]]) -> bytes:
+    """minimal RGBA8 PNG encoder (zlib + crc32 from the standard library)"""
+    import zlib
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+
+    raw = bytearray()
+    for y in range(height):
+        raw.append(0)  # filter: none
+        for x in range(width):
+            raw.extend(bytes(pixels[y * width + x]))
+    header = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(b"IEND", b"")
+
+
+def soft_dot_texture(size: int = 64) -> bytes:
+    """white disc with a smooth falloff, particles tint it"""
+    pixels = []
+    for y in range(size):
+        for x in range(size):
+            dx = (x + 0.5) / size * 2.0 - 1.0
+            dy = (y + 0.5) / size * 2.0 - 1.0
+            r = math.sqrt(dx * dx + dy * dy)
+            a = max(0.0, 1.0 - r)
+            a = a * a * (3.0 - 2.0 * a)
+            pixels.append((255, 255, 255, int(a * 255)))
+    return png_bytes(size, size, pixels)
+
+
+def blood_splat_texture(seed: int, size: int = 128) -> bytes:
+    """hard edged splatter for alpha masking: a lumpy pool, streaks thrown out one way, droplets around it"""
+    import random
+
+    rng = random.Random(seed)
+    blobs = []  # (cx, cy, radius) in [-1, 1] space
+    lobes = [(rng.uniform(0, 2 * math.pi), rng.uniform(0.08, 0.2)) for _ in range(7)]
+    throw = rng.uniform(0, 2 * math.pi)
+    for i in range(rng.randint(5, 8)):
+        # streaks: a line of shrinking blobs in the throw direction
+        angle = throw + rng.uniform(-0.6, 0.6)
+        length = rng.uniform(0.45, 0.85)
+        steps = 6
+        for k in range(steps):
+            t = 0.25 + length * k / steps
+            blobs.append((math.cos(angle) * t, math.sin(angle) * t, 0.07 * (1.0 - k / steps) + 0.015))
+    for _ in range(rng.randint(10, 18)):
+        # droplets
+        angle = rng.uniform(0, 2 * math.pi)
+        dist = rng.uniform(0.45, 0.95)
+        blobs.append((math.cos(angle) * dist, math.sin(angle) * dist, rng.uniform(0.015, 0.045)))
+
+    pixels = []
+    for y in range(size):
+        for x in range(size):
+            px = (x + 0.5) / size * 2.0 - 1.0
+            py = (y + 0.5) / size * 2.0 - 1.0
+            angle = math.atan2(py, px)
+            radius = 0.34 + sum(amp * math.cos(angle * (i + 2) + phase) for i, (phase, amp) in enumerate(lobes)) * 0.35
+            inside = math.hypot(px, py) < radius
+            if not inside:
+                inside = any((px - bx) ** 2 + (py - by) ** 2 < br * br for bx, by, br in blobs)
+            # value varies a little so the pool doesn't look flat, alpha is the mask
+            shade = 205 + int(40 * (0.5 + 0.5 * math.sin(px * 9.0 + py * 7.0)))
+            pixels.append((shade, shade, shade, 255 if inside else 0))
+    return png_bytes(size, size, pixels)
+
+
+TEXTURES = {
+    "soft_dot": soft_dot_texture,
+    **{f"blood_splat_{i}": (lambda i=i: blood_splat_texture(1000 + i)) for i in range(4)},
+}
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -255,6 +337,7 @@ class Node:
 
 def write_glb(path: Path, root: Node):
     materials: list[Mat] = []
+    images: list[str] = []  # texture names, one glTF image + texture each
     material_index: dict[Mat, int] = {}
     buffer = bytearray()
     buffer_views = []
@@ -262,12 +345,15 @@ def write_glb(path: Path, root: Node):
     meshes = []
     nodes = []
 
-    def push_view(data: bytes, target: int) -> int:
+    def push_view(data: bytes, target: int | None) -> int:
         while len(buffer) % 4:
             buffer.append(0)
         offset = len(buffer)
         buffer.extend(data)
-        buffer_views.append({"buffer": 0, "byteOffset": offset, "byteLength": len(data), "target": target})
+        view = {"buffer": 0, "byteOffset": offset, "byteLength": len(data)}
+        if target is not None:
+            view["target"] = target
+        buffer_views.append(view)
         return len(buffer_views) - 1
 
     def push_accessor(values, kind: str) -> int:
@@ -323,17 +409,27 @@ def write_glb(path: Path, root: Node):
 
     root_index = emit(root)
 
+    for m in materials:
+        if m.texture and m.texture not in images:
+            images.append(m.texture)
+    image_json = [{"name": name, "mimeType": "image/png", "bufferView": push_view(TEXTURES[name](), None)} for name in images]
+
     gltf = {
         "asset": {"version": "2.0", "generator": "oxcity assetgen"},
         "scene": 0,
         "scenes": [{"name": root.name, "nodes": [root_index]}],
         "nodes": nodes,
         "meshes": meshes,
-        "materials": [material_json(m) for m in materials],
+        "materials": [material_json(m, images) for m in materials],
         "accessors": accessors,
         "bufferViews": buffer_views,
         "buffers": [{"byteLength": len(buffer)}],
     }
+    if images:
+        gltf["images"] = image_json
+        # linear filtering, clamped: these are decals and sprites, not tiling surfaces
+        gltf["samplers"] = [{"magFilter": 9729, "minFilter": 9987, "wrapS": 33071, "wrapT": 33071}]
+        gltf["textures"] = [{"source": i, "sampler": 0} for i in range(len(images))]
     if any(m.emissive_strength != 1.0 for m in materials):
         gltf["extensionsUsed"] = ["KHR_materials_emissive_strength"]
 
@@ -350,7 +446,7 @@ def write_glb(path: Path, root: Node):
     path.write_bytes(out)
 
 
-def material_json(m: Mat) -> dict:
+def material_json(m: Mat, images: list[str]) -> dict:
     out = {
         "name": m.name,
         "pbrMetallicRoughness": {
@@ -359,6 +455,12 @@ def material_json(m: Mat) -> dict:
             "roughnessFactor": m.roughness,
         },
     }
+    if m.texture:
+        out["pbrMetallicRoughness"]["baseColorTexture"] = {"index": images.index(m.texture)}
+    if m.alpha_mode != "OPAQUE":
+        out["alphaMode"] = m.alpha_mode
+        if m.alpha_mode == "MASK":
+            out["alphaCutoff"] = m.alpha_cutoff
     if any(m.emissive):
         out["emissiveFactor"] = list(m.emissive)
         if m.emissive_strength != 1.0:
@@ -669,6 +771,41 @@ def marker() -> Node:
     return root
 
 
+def fx() -> Node:
+    """holds the materials particle systems render with (.oxparticle files reference them by uuid). The quad
+    itself is never spawned"""
+    root = Node("fx")
+    dot = Mat("fx_soft_dot", (1.0, 1.0, 1.0, 1.0), roughness=1.0, texture="soft_dot", alpha_mode="BLEND")
+    g = Geo()
+    g.quad((-0.5, 0.0, 0.5), (0.5, 0.0, 0.5), (0.5, 0.0, -0.5), (-0.5, 0.0, -0.5), (0, 1, 0))
+    root.add(g, dot)
+    return root
+
+
+def blood(variant: int) -> Node:
+    """a flat 1x1 m splat lying on the ground, alpha masked. Glossy, it's wet"""
+    root = Node(f"blood_{variant}")
+    m = Mat(f"blood_{variant}", srgb("#5a0404"), roughness=0.25, texture=f"blood_splat_{variant}", alpha_mode="MASK")
+    g = Geo()
+    g.quad((-0.5, 0.0, 0.5), (0.5, 0.0, 0.5), (0.5, 0.0, -0.5), (-0.5, 0.0, -0.5), (0, 1, 0))
+    root.add(g, m)
+    return root
+
+
+def knife() -> Node:
+    """combat knife held in the fist: origin at the grip, blade along -y (down the arm) and forward. The game parents it
+    to the right arm's hand"""
+    root = Node("knife")
+    steel = mat("knife_steel", "#dfe3e8", metallic=1.0, roughness=0.2)
+    grip = mat("knife_grip", "#1b1b1b", roughness=0.6)
+    root.add(box((0.0, 0.0, 0.0), (0.05, 0.05, 0.14)), grip)
+    root.add(box((0.0, 0.0, 0.09), (0.12, 0.05, 0.03)), mat("knife_guard", "#8a8f96", metallic=0.8, roughness=0.3))
+    blade = Geo()
+    blade.extend(box((0.0, 0.0, 0.24), (0.018, 0.07, 0.28)))
+    root.add(blade, steel)
+    return root
+
+
 def all_models() -> dict[str, Node]:
     models = {}
     for name in CHARACTER_STYLES:
@@ -690,6 +827,10 @@ def all_models() -> dict[str, Node]:
     models["Props/cash"] = cash()
     models["Props/tracer"] = tracer()
     models["Props/marker"] = marker()
+    models["Props/fx"] = fx()
+    models["Props/knife"] = knife()
+    for i in range(4):
+        models[f"Props/blood_{i}"] = blood(i)
     return models
 
 

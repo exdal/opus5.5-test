@@ -339,7 +339,7 @@ auto World::update_vehicles(this World& self, const GameInput& input, f32 dt) ->
       if (!ped.alive || ped.state == PedState::Driving || !inside(ped.position, 0.3f)) {
         continue;
       }
-      self.kill_ped(static_cast<PedID>(k), to2(velocity) * 0.6f);
+      self.kill_ped(static_cast<PedID>(k), to2(velocity) * 0.6f, c.player_inside);
       self.play(self.assets.sfx_punch, 1.0f, 0.6f);
       if (c.player_inside) {
         self.commit_crime(ped.kind == PedKind::Cop ? 2.0f : 0.7f, pos, "");

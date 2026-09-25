@@ -68,7 +68,7 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
         if (self.start_step > self.step) {
           OX_LOG_INFO("OxCity autoplay: skipping ahead to step {}", self.start_step);
           self.step = self.start_step;
-          if (self.step >= 7) {
+          if (self.step >= 7 && self.step < 20) {
             world.wanted.heat = 3.5f; // the chase needs someone to be chasing
           }
         }
@@ -315,6 +315,75 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
         self.next("respawned");
       } else if (self.step_time > 15.0f) {
         self.next("didn't respawn");
+      }
+      break;
+    }
+    case 20: { // engine check: a destroyed mesh must take its cached VSM shadow with it
+      if (at(3.0f)) {
+        self.screenshot("shadow_before");
+      }
+      if (at(3.5f)) {
+        self.probe = world.spawn_model(world.assets.van, to3(me + glm::vec2(5.0f, 0.0f), 0.0f), 0.0f);
+      }
+      if (at(5.5f)) {
+        self.screenshot("shadow_with_van");
+      }
+      if (at(6.0f) && self.probe) {
+        self.probe.destruct();
+        self.probe = {};
+      }
+      if (at(8.0f)) {
+        self.screenshot("shadow_after");
+        self.next("spawned and destroyed a van for the shadow check");
+      }
+      break;
+    }
+    case 21: { // knife, blood, combo, then the pistol's muzzle flash and sparks
+      // bring a civilian to the player and slash it; the aim goes where the victim stands
+      auto victim_at = [&](f32 t, glm::vec2 offset) {
+        if (at(t)) {
+          world.player.weapon = Weapon::Knife;
+          for (auto& ped : world.peds) {
+            if (ped.alive && ped.kind == PedKind::Civilian && ped.state != PedState::Driving) {
+              ped.position = me + offset;
+              ped.state = PedState::Idle;
+              break;
+            }
+          }
+        }
+      };
+      victim_at(0.5f, {1.1f, 0.0f});
+      victim_at(1.2f, {0.0f, -1.1f});
+      if (self.step_time > 0.6f && self.step_time < 0.7f) {
+        input.has_aim = true;
+        input.aim = me + glm::vec2(3.0f, 0.0f);
+        input.attack = true;
+      }
+      if (self.step_time > 1.3f && self.step_time < 1.4f) {
+        input.has_aim = true;
+        input.aim = me + glm::vec2(0.0f, -3.0f);
+        input.attack = true;
+      }
+      if (at(0.75f)) {
+        self.screenshot("knife_kill");
+      }
+      if (at(1.5f)) {
+        self.screenshot("knife_combo");
+      }
+      if (at(2.4f)) {
+        world.player.weapon = Weapon::Pistol;
+      }
+      if (self.step_time > 2.5f && self.step_time < 2.56f) {
+        input.has_aim = true;
+        input.aim = me + glm::vec2(-8.0f, 0.0f);
+        input.attack = true;
+      }
+      if (at(2.56f)) {
+        self.screenshot("muzzle_and_sparks");
+      }
+      if (at(4.5f)) {
+        self.screenshot("blood_pools");
+        self.next(fmt::format("knife kills {}, combo score {}", world.stats.peds_killed, world.juice.score));
       }
       break;
     }

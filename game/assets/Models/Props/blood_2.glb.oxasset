@@ -1,0 +1,50 @@
+{
+  "uuid": "0d403a12-1671-4d7d-8126-d575620f89a9",
+  "type": 2,
+  "source_hash": "32CF3DE37486427B",
+  "textures": [
+    {
+      "uuid": "b0ab4d6b-1ed9-4676-8784-70091d2e9ab0",
+      "external": "",
+      "cache": "b0ab4d6b-1ed9-4676-8784-70091d2e9ab0.oxpack",
+      "srgb": true
+    }
+  ],
+  "materials": [
+    {
+      "uuid": "95de0358-7fe9-4190-894c-fa0c1db23894",
+      "sampling_mode": 0,
+      "albedo_color": {
+        "x": 0.102242,
+        "y": 0.00121411,
+        "z": 0.00121411,
+        "w": 1
+      },
+      "uv_size": {
+        "x": 1,
+        "y": 1
+      },
+      "uv_offset": {
+        "x": 0,
+        "y": 0
+      },
+      "emissive_color": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "roughness_factor": 0.25,
+      "metallic_factor": 0,
+      "normal_scale": 1,
+      "occlusion_strength": 1,
+      "alpha_mode": 1,
+      "alpha_cutoff": 0.5,
+      "flip_normal_y": false,
+      "albedo_texture": "b0ab4d6b-1ed9-4676-8784-70091d2e9ab0",
+      "normal_texture": "00000000-0000-0000-0000-000000000000",
+      "emissive_texture": "00000000-0000-0000-0000-000000000000",
+      "metallic_roughness_texture": "00000000-0000-0000-0000-000000000000",
+      "occlusion_texture": "00000000-0000-0000-0000-000000000000"
+    }
+  ]
+}

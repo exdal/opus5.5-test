@@ -4,6 +4,7 @@
 #include "Core/App.hpp"
 #include "Core/DefaultModules.hpp"
 #include "Game.hpp"
+#include "ParticleAssets.hpp"
 
 // OxCity
 //   --autoplay            drive the player with the scripted test run in Autoplay.cpp
@@ -13,7 +14,15 @@
 //   --fixed-dt S          step the simulation with a fixed delta time
 //   --seed N              city / traffic seed
 //   --width W --height H  window size
+//   --write-particles DIR build the particle graphs and write them as .oxparticle files, then exit
 auto main(int argc, char** argv) -> int {
+  // authoring mode: no window, no engine modules, just the particle graph API
+  for (int i = 1; i + 1 < argc; i++) {
+    if (std::string_view(argv[i]) == "--write-particles") {
+      return oxcity::write_particle_assets(argv[i + 1]) ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+  }
+
   auto app = ox::App(argc, argv);
   const auto& args = app.get_command_line_args();
 
