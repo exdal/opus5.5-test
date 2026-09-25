@@ -785,7 +785,7 @@ auto Scene::init(this Scene& self, const std::string& name) -> void {
 
   self.world.system<const TransformComponent, AudioSourceComponent>("audio_source_update")
     .kind(flecs::PreUpdate)
-    .each([](const flecs::entity& e, const TransformComponent& tc, const AudioSourceComponent& ac) {
+    .each([&self](const flecs::entity& e, const TransformComponent& tc, const AudioSourceComponent& ac) {
       auto& asset_man = App::mod<AssetManager>();
       if (auto audio = asset_man.get_audio(ac.audio_source)) {
         auto& audio_engine = App::mod<AudioEngine>();
@@ -796,7 +796,12 @@ auto Scene::init(this Scene& self, const std::string& name) -> void {
         audio_engine.set_source_volume(audio->get_source(), ac.volume);
         audio_engine.set_source_pitch(audio->get_source(), ac.pitch);
         audio_engine.set_source_looping(audio->get_source(), ac.looping);
-        audio_engine.set_source_spatialization(audio->get_source(), ac.looping);
+        audio_engine.set_source_spatialization(audio->get_source(), ac.spatialization);
+        if (ac.spatialization) {
+          // world space, the listener side does the same with its own transform
+          const auto world = self.get_world_transform(e);
+          audio_engine.set_source_position(audio->get_source(), glm::vec3(world[3]));
+        }
         audio_engine.set_source_roll_off(audio->get_source(), ac.roll_off);
         audio_engine.set_source_min_gain(audio->get_source(), ac.min_gain);
         audio_engine.set_source_max_gain(audio->get_source(), ac.max_gain);
