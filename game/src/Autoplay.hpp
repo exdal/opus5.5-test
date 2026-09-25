@@ -15,6 +15,7 @@ public:
   auto report(this const Autoplay& self, const World& world) -> bool;
 
   std::string pending_screenshot = {};
+  i32 start_step = 0;
 
 private:
   i32 step = 0;

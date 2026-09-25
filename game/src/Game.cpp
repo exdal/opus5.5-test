@@ -28,6 +28,7 @@ auto Game::init(this Game& self) -> std::expected<void, std::string> {
 
   if (self.options.autoplay) {
     OX_LOG_INFO("OxCity: autoplay enabled");
+    self.autoplay.start_step = self.options.autoplay_from;
   }
 
   return {};

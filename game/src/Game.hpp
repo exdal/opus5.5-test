@@ -26,6 +26,7 @@ struct GameOptions {
   std::filesystem::path screenshot_dir = {};
   u32 seed = 1999;
   f32 fixed_dt = 0.0f; // non zero steps the game with a fixed delta, for deterministic headless runs
+  i32 autoplay_from = 0; // skip the autoplay ahead to this step once the game has started
 };
 
 // The whole game as one engine module: `App` calls `update` once per frame, which runs the simulation, the

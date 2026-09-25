@@ -9,6 +9,7 @@
 //   --autoplay            drive the player with the scripted test run in Autoplay.cpp
 //   --frames N            quit after N frames
 //   --screenshots DIR     write the autoplay screenshots into DIR
+//   --autoplay-from N     autoplay, but skip ahead to step N after the menu (7 = police chase, arrest, respawn)
 //   --fixed-dt S          step the simulation with a fixed delta time
 //   --seed N              city / traffic seed
 //   --width W --height H  window size
@@ -34,6 +35,10 @@ auto main(int argc, char** argv) -> int {
   }
   if (auto dt = value_of("--fixed-dt"); !dt.empty()) {
     options.fixed_dt = static_cast<f32>(std::atof(dt.c_str()));
+  }
+  if (auto from = value_of("--autoplay-from"); !from.empty()) {
+    options.autoplay = true;
+    options.autoplay_from = std::atoi(from.c_str());
   }
   if (auto seed = value_of("--seed"); !seed.empty()) {
     options.seed = static_cast<u32>(std::atoi(seed.c_str()));

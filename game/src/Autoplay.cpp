@@ -65,6 +65,13 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
         self.entered_game = true;
         self.cash_at_start = world.player.cash;
         self.next("started a new game from the menu");
+        if (self.start_step > self.step) {
+          OX_LOG_INFO("OxCity autoplay: skipping ahead to step {}", self.start_step);
+          self.step = self.start_step;
+          if (self.step >= 7) {
+            world.wanted.heat = 3.5f; // the chase needs someone to be chasing
+          }
+        }
       }
       break;
     }
