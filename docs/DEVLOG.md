@@ -225,3 +225,14 @@ What I'd take away as an engine user: **ordering by module registration is invis
 `App::with<>` tells you that a module registered after `Renderer` can't load assets and draw them in
 the same frame. Either state sync belongs in the render path (as patched), or the engine needs a
 documented "pre-render" phase.
+
+## Day 2, later: "only the first bullet shows"
+
+The project owner then reported that shooting only drew the first tracer: after that, just the gunshot
+sound. The hitscan and the damage never depended on the tracer, but the tracer model did. When the first
+tracer faded, the engine dropped the model to refcount zero and **erased it from the asset registry**, so
+every later `spawn_tracer` logged `Cannot import an invalid model` (it had been in my own logs all along;
+I had read it as noise). That's the second half of patch 11. Once that was fixed, a new problem showed
+up: an 80 ms tracer now meant loading `tracer.glb` from disk on nearly every shot. The game now holds one
+ref on every model it spawns at runtime for the whole session (`runtime_models()` in `World.cpp`). That's
+a pattern the engine should make obvious (ENGINE_FEEDBACK.md, friction item 10).

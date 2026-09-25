@@ -42,6 +42,15 @@ static auto find_asset(std::string_view relative) -> ox::UUID {
   return uuid;
 }
 
+// models that come and go at runtime. The engine unloads a model as soon as its last instance is destroyed, so a
+// tracer (alive for 0.08 s) would be read from disk and uploaded again on every shot. Holding one ref for the
+// whole session keeps them resident.
+static auto runtime_models(const AssetTable& a) -> std::vector<ox::UUID> {
+  auto models = std::vector<ox::UUID>(a.peds.begin(), a.peds.end());
+  models.insert(models.end(), {a.cop, a.guard, a.sedan, a.sports, a.taxi, a.police, a.van, a.wheel, a.cash, a.tracer, a.marker});
+  return models;
+}
+
 World::World(u32 seed) : rng(seed) {}
 
 World::~World() {
@@ -55,6 +64,13 @@ World::~World() {
                              &a.sfx_radio}) {
       if (*uuid) {
         asset_man.unload_asset(*uuid);
+      }
+    }
+    if (this->holding_models) {
+      for (const auto& uuid : runtime_models(a)) {
+        if (uuid) {
+          asset_man.unload_asset(uuid);
+        }
       }
     }
   }
@@ -125,6 +141,16 @@ auto World::init(this World& self) -> bool {
   if (!a.player || !a.sedan || !a.road_straight) {
     OX_LOG_ERROR("OxCity: core assets are missing, was the game built with the ox.cook_assets rule?");
     return false;
+  }
+
+  {
+    auto& asset_man = ox::App::mod<ox::AssetManager>();
+    for (const auto& uuid : runtime_models(a)) {
+      if (uuid && !asset_man.load_asset(uuid)) {
+        OX_LOG_ERROR("OxCity: couldn't load model {}", uuid.str());
+      }
+    }
+    self.holding_models = true;
   }
 
   self.scene = std::make_unique<ox::Scene>("OxCity");

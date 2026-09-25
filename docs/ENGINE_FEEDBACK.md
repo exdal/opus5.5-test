@@ -72,7 +72,12 @@ miniaudio and asset cooking. It ran headless on llvmpipe with 4 CPU cores.
 9. **`create_model_entity` spawns synchronously and loads the asset on the calling thread.** That's
    fine for a city built at load time, but there's no pooling or instancing API. 20 police cars means
    20 full hierarchy spawns and 20 x 5 flecs entities.
-10. **`Scene` exposes Jolt in its public header** (`Scene.hpp` includes six Jolt headers). AGENTS.md
+10. **No "keep this resident" API.** Once refcounts are right (patch 11), a model unloads the moment
+    its last instance goes away. Anything spawned briefly (a tracer that lives 80 ms, a cash pickup, a
+    police car that comes and goes) would be read from disk and re-uploaded every time. A game has to
+    know to call `load_asset` once at startup and `unload_asset` at shutdown to pin it, and nothing
+    documents that. A `Scene::preload(uuid)` or an `AssetHandle` RAII type would say it in the API.
+11. **`Scene` exposes Jolt in its public header** (`Scene.hpp` includes six Jolt headers). AGENTS.md
     already calls this debt, and I agree: every game TU pays for it.
 
 ## Things that were genuinely good

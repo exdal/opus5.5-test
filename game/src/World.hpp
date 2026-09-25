@@ -307,6 +307,7 @@ public:
 
   std::unique_ptr<ox::Scene> scene;
   AssetTable assets = {};
+  bool holding_models = false; // runtime_models() refs taken in init, handed back in the destructor
   std::mt19937 rng;
 
   GameState state = GameState::MainMenu;
