@@ -308,7 +308,18 @@ auto World::update(this World& self, const GameInput& input, f32 dt) -> void {
   self.update_audio(dt);
   self.update_hud();
 
-  // the paused world still has to reach the renderer, it just doesn't advance
-  self.scene->runtime_update(ox::App::get_timestep());
+  // the paused world still has to reach the renderer (and RmlUi still needs its update), it just doesn't
+  // advance: the gameplay and physics phases are switched off rather than stepping with a zero delta, which
+  // flecs would read as "measure the frame time yourself"
+  const auto paused = self.state == GameState::Paused;
+  if (paused != self.phases_disabled) {
+    self.phases_disabled = paused;
+    if (paused) {
+      self.scene->disable_phases({flecs::PreUpdate, flecs::OnUpdate});
+    } else {
+      self.scene->enable_all_phases();
+    }
+  }
+  self.scene->runtime_step(dt);
 }
 } // namespace oxcity

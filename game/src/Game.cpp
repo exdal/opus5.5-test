@@ -79,10 +79,10 @@ auto Game::read_input(this Game& self) -> GameInput {
 auto Game::update(this Game& self, const ox::Timestep& timestep) -> void {
   ZoneScoped;
 
-  // the engine's physics steps at most once per frame (a flecs interval timer), so anything slower than 60 fps
-  // runs physics in slow motion. keeping gameplay on the same clamp keeps the two in step
+  // the scene is stepped with this same delta (Scene::runtime_step), physics catches up in fixed 1/60
+  // substeps. clamped so a long hitch doesn't teleport everything
   auto dt = self.options.fixed_dt > 0.0f ? self.options.fixed_dt
-                                         : glm::clamp(static_cast<f32>(timestep.get_seconds()), 0.0f, 1.0f / 30.0f);
+                                         : glm::clamp(static_cast<f32>(timestep.get_seconds()), 0.001f, 1.0f / 15.0f);
 
   auto input = self.options.autoplay ? self.autoplay.update(*self.world, dt) : self.read_input();
   self.world->update(input, dt);

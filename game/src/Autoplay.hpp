@@ -39,5 +39,8 @@ private:
 
   auto next(this Autoplay& self, std::string_view what) -> void;
   auto screenshot(this Autoplay& self, std::string_view name) -> void;
+  // a single key press, at most once a second, so one "press F" doesn't become three frames of F
+  auto tap(this Autoplay& self) -> bool;
+  f32 last_tap = -10.0f;
 };
 } // namespace oxcity

@@ -28,6 +28,14 @@ auto Autoplay::screenshot(this Autoplay& self, std::string_view name) -> void {
   self.pending_screenshot = fmt::format("{:02}_{}", self.shots_taken, name);
 }
 
+auto Autoplay::tap(this Autoplay& self) -> bool {
+  if (self.total_time - self.last_tap < 1.0f) {
+    return false;
+  }
+  self.last_tap = self.total_time;
+  return true;
+}
+
 auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
   auto input = GameInput{};
   const auto before = self.step_time;
@@ -85,8 +93,8 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
       if (self.target_car != CarID::Invalid) {
         const auto target = world.car_position(self.target_car);
         input.move = walk_towards(me, target);
-        if (glm::distance(me, target) < 3.6f && glm::fract(self.step_time) < 0.1f) {
-          input.enter_exit = true;
+        if (glm::distance(me, target) < 3.6f) {
+          input.enter_exit = self.tap();
         }
       }
       if (in_car) {
@@ -141,7 +149,7 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
     }
     case 3: { // get out
       if (in_car) {
-        input.enter_exit = glm::fract(self.step_time * 2.0f) < 0.1f;
+        input.enter_exit = self.tap();
       } else {
         self.next("got out of the car");
       }
@@ -201,8 +209,8 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
       break;
     }
     case 5: { // pistol whip the neighbourhood
-      if (world.player.weapon != Weapon::Pistol && glm::fract(self.step_time) < 0.05f) {
-        input.switch_weapon = true;
+      if (world.player.weapon != Weapon::Pistol) {
+        input.switch_weapon = self.tap();
       }
       auto best = std::numeric_limits<f32>::max();
       auto target = me + glm::vec2(0.0f, -5.0f);
@@ -261,7 +269,7 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
           world.teleport_player(target + glm::vec2(3.0f, 0.0f));
         }
         input.move = walk_towards(me, target);
-        input.enter_exit = best < 3.6f && glm::fract(self.step_time) < 0.1f;
+        input.enter_exit = best < 3.6f && self.tap();
       } else {
         const auto id = world.player.car;
         const auto pos = world.car_position(id);
@@ -282,7 +290,7 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
     }
     case 8: { // hands up
       if (in_car) {
-        input.enter_exit = glm::fract(self.step_time * 2.0f) < 0.1f;
+        input.enter_exit = self.tap();
       }
       if (world.state == GameState::Arrested || world.state == GameState::Dead) {
         if (world.state_timer > 1.0f) {

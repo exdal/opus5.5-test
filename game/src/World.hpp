@@ -347,6 +347,7 @@ public:
   bool siren_playing = false;
   bool radio_playing = false;
   bool alarm_playing = false;
+  bool phases_disabled = false;
 
   auto random_float(this World& self, f32 lo, f32 hi) -> f32;
   auto random_int(this World& self, i32 lo, i32 hi) -> i32;
