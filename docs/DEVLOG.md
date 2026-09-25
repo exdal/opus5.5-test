@@ -77,3 +77,81 @@ but xmake's fallback chain is genuinely good. The exceptions:
 None of this is Oxylus's fault. It's the cost of "build everything from source" plus a locked-down
 network, and a real studio build machine would hit the same wall. A **prebuilt dependency bundle**
 (or `package.precompiled=true` with a binary mirror) would make first-time setup far less fragile.
+
+---
+
+## Day 1, afternoon: writing the game
+
+### Shape of the code
+Everything is one engine module, `oxcity::Game`, registered after `DefaultModules`. It owns a `World`,
+which owns an `ox::Scene` plus plain C++ vectors of gameplay objects (peds, cars, pickups) that hold
+`flecs::entity` handles for their visuals and physics. The engine's own systems do the heavy work:
+Jolt stepping, vehicle constraints, transform propagation, rendering, RmlUi. My code writes inputs
+into components and reads positions back. I deliberately stayed in C++ rather than the Lua scripting
+layer, to exercise the engine's public headers.
+
+Per frame, `Game::update`:
+1. reads input, or autoplay input
+2. calls `World::update(input, dt)`, which runs the gameplay and then `scene->runtime_step(dt)`
+3. calls `render_context.new_frame()`, `scene->render(...)`, `end_frame()`
+
+Finding step 3 meant reading `Editor::update`. It's four lines once you know them.
+
+### Assets
+I wrote a ~500-line dependency-free glTF writer (`tools/assetgen/models.py`): boxes, wedges and
+cylinders, flat normals, one primitive per material, and emissive strength for windows, lamps and
+sirens. Characters are node hierarchies (`torso`, `leg_l`, `arm_r`, ...) with each node's origin at
+its joint, so limbs can swing without skinning. Sounds are synthesized with the Python stdlib
+(`tools/assetgen/sounds.py`): engine loop, siren, gunshot, cash register, alarm bell, and a little
+chiptune radio loop.
+
+The engine's cooker accepted all of it on the first try and wrote `.oxasset` sidecars next to the
+sources (committed, as AGENTS.md asks). At runtime `AssetManager::find_asset(physical path)` returns
+the UUID. The one catch: audio isn't packed, so the manifest points at the source `.wav` under the
+assets dir, and the build has to copy the `.wav` files next to the binary too.
+
+### Things that bit me, in the order they did
+1. **Explicit object parameters + `const`**: I wrote `auto f(this const World& self) const`, and clang
+   rightly refuses it. Engine-style C++23 takes a moment to get used to.
+2. **`unique_ptr<ox::Scene>` with a forward declaration** needs the default member initializer
+   dropped. Otherwise every TU that includes `World.hpp` instantiates the deleter.
+3. **Headless Vulkan**: `SDL_VIDEO_DRIVER=offscreen` + lavapipe failed with
+   `no_surface_provided`, because the engine never enabled `VK_EXT_headless_surface`. Engine patch 1.
+4. **flecs abort** the first time a car got its second wheel: `create_model_entity` names the entity
+   after the glTF node ("wheel"), and `child_of` collides with the first wheel's name. Renaming before
+   re-parenting fixed it (feedback B7).
+5. **Limbs not found**: the model compiler adds a group node for the glTF scene, so my limb nodes are
+   grandchildren. A recursive lookup fixed it.
+6. **llvmpipe JIT crashes** (`LLVM ERROR: Cannot emit physreg copy instruction`). This is Mesa 25.2's
+   bug, not Oxylus's, but it's triggered by the mesh shader / ray tracing paths the engine turns on
+   whenever the device advertises them. `context_config.toml` with `mesh_shaders = false` and
+   `ray_tracing = false` fixed it. Mesa 24.0 (LLVM 17) doesn't have the headless WSI at all, so
+   downgrading wasn't an option.
+7. **Shutdown segfault**, from audio assets outliving the audio engine. Engine patch 3, and the game
+   now gives its sound refs back.
+8. **256x256 screenshots**: the headless swapchain ignored the window size. Engine patch 2.
+9. **Pitch-black city**: my sun pointed at the ground. In Oxylus the directional light's forward
+   axis points *towards* the sun (the editor's default scene uses +45 deg pitch). A comment on
+   `LightComponent` would have saved a build.
+10. **Cars in slow motion**: physics ticks at most once per frame. Engine patch 4 adds catch-up
+    substeps and lets the game step the scene with its own (fixed) delta.
+
+After that, the first real frame came out looking like the game in my head. The city is lit, with
+shadows, buildings with lit windows and rooftop clutter, crosswalks, street lamps and traffic, and
+the RmlUi HUD on top: the pager, the rolling cash counter, the wanted diamonds, health, weapon, and
+the vehicle name and speed.
+
+### RmlUi
+This was the smoothest part. The scene already owns an `Rml::Context`
+(`scene->get_rml_context()`), so the HUD is two `.rml` documents and one data model:
+
+```cpp
+auto ctor = context->CreateDataModel("hud");
+ctor.Bind("money", &hud.money);
+ctor.BindEventCallback("start", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) { ... });
+```
+
+`data-if`, `data-class-lit="wanted >= 3"` and `data-style-width="health + '%'"` covered the whole
+HUD, the heist progress bar and the menus without a single DOM lookup. The engine routes mouse
+input to the view under the cursor, and the menu buttons just work. Two small gaps: no VFS-aware
+file interface (I resolve real paths) and no default font (the game loads FiraSans itself).
