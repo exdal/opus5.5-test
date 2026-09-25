@@ -13,6 +13,8 @@
 #include "UI/RmlUI.hpp"
 
 namespace ox {
+// AudioEngine comes before AssetManager: modules deinit in reverse order, and audio assets own ma_sounds that have
+// to be uninitialized while the engine they belong to is still alive
 using DefaultModules =
-  std::tuple<LuaManager, AssetManager, AudioEngine, Physics, Input, NetworkManager, Renderer, ImGuiRenderer, RmlUI>;
+  std::tuple<LuaManager, AudioEngine, AssetManager, Physics, Input, NetworkManager, Renderer, ImGuiRenderer, RmlUI>;
 }
