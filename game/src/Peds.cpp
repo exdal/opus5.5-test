@@ -211,9 +211,12 @@ auto World::update_peds(this World& self, f32 dt) -> void {
         // cops shoot from three stars up, guards whenever the alarm rings
         const auto armed = p.kind == PedKind::Guard || self.stars() >= 3;
         if (armed && player_dist < 16.0f && p.attack_cooldown <= 0.0f) {
-          p.attack_cooldown = self.random_float(0.7f, 1.4f);
-          const auto aim_error = self.random_float(-0.12f, 0.12f);
-          self.shoot(p.position + glm::normalize(to_player) * 0.5f, heading_of(to_player) + aim_error, 7.0f, false);
+          // guards are nervous shots, the heist is meant to be survivable if you keep drilling
+          const auto guard = p.kind == PedKind::Guard;
+          p.attack_cooldown = guard ? self.random_float(1.2f, 2.2f) : self.random_float(0.8f, 1.5f);
+          const auto spread = guard ? 0.2f : 0.12f;
+          const auto aim_error = self.random_float(-spread, spread);
+          self.shoot(p.position + glm::normalize(to_player) * 0.5f, heading_of(to_player) + aim_error, guard ? 4.0f : 6.0f, false);
           if (player_dist < 5.0f) {
             desired = {}; // stand and shoot
           }
