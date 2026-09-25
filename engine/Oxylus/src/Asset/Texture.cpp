@@ -282,6 +282,14 @@ auto Texture::create(const TextureData& data, const TextureLoadInfo& info, OX_CA
 auto Texture::destroy(this Texture& self) -> void {
   ZoneScoped;
 
+  // an empty texture owns nothing; don't reach for the render context, which may not exist (a ParticleSystem
+  // built and written by a tool, a texture destroyed after the renderer is gone)
+  if (self.image_id == ImageID::Invalid && self.image_view_id == ImageViewID::Invalid &&
+      self.sampler_id == SamplerID::Invalid) {
+    self.attachment = {};
+    return;
+  }
+
   auto& render_context = App::get_rendercontext();
 
   if (self.image_id != ImageID::Invalid)
