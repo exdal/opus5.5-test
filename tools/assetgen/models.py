@@ -2,7 +2,7 @@
 """Low-poly model generator for OxCity.
 
 Writes binary glTF (.glb) files with no third-party dependencies. Every model is built from boxes,
-cylinders and wedges with flat per-face normals and plain PBR base colours, the look is "GTA 2 seen
+cylinders and wedges with flat per-face normals and plain PBR base colours, the look is "a toy city seen
 from a crane". Coordinates are glTF defaults: metres, +Y up, +Z forward.
 
 Models are node hierarchies so the game can animate parts (character limbs swing around their

@@ -70,7 +70,7 @@ auto World::damage_player(this World& self, f32 amount) -> void {
   self.player.health -= amount;
   if (self.player.health <= 0.0f) {
     self.player.health = 0.0f;
-    self.waste_player();
+    self.kill_player();
   }
 }
 

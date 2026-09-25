@@ -1,4 +1,4 @@
-/* OxCity UI, GTA 2 flavoured: chunky yellow numbers, a green pager, flat colour blocks */
+/* OxCity UI, retro top-down flavoured: chunky yellow numbers, a green pager, flat colour blocks */
 
 body, div, p, h1, h2, span, button {
 	display: block;

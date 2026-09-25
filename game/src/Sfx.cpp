@@ -24,7 +24,7 @@ auto World::init_audio(this World& self) -> void {
   auto& audio = ox::App::mod<ox::AudioEngine>();
   const auto& a = self.assets;
   for (const auto* uuid : {&a.sfx_engine, &a.sfx_siren, &a.sfx_horn, &a.sfx_gunshot, &a.sfx_punch, &a.sfx_cash,
-                           &a.sfx_footstep, &a.sfx_door, &a.sfx_crash, &a.sfx_alarm, &a.sfx_pager, &a.sfx_wasted,
+                           &a.sfx_footstep, &a.sfx_door, &a.sfx_crash, &a.sfx_alarm, &a.sfx_pager, &a.sfx_death,
                            &a.sfx_radio}) {
     if (!*uuid || !asset_man.load_asset(*uuid)) {
       OX_LOG_WARN("OxCity: couldn't load a sound");

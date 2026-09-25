@@ -65,7 +65,7 @@ enum class Weapon : u8 { Fists = 0, Pistol };
 enum class PedKind : u8 { Civilian = 0, Cop, Guard };
 enum class PedState : u8 { Wander = 0, Flee, Chase, Attack, Dead, Driving, Idle };
 enum class CarRole : u8 { Parked = 0, Traffic, Police, Abandoned };
-enum class GameState : u8 { MainMenu = 0, Playing, Paused, Wasted, Busted };
+enum class GameState : u8 { MainMenu = 0, Playing, Paused, Dead, Arrested };
 
 enum class PedID : i32 { Invalid = -1 };
 enum class CarID : i32 { Invalid = -1 };
@@ -159,7 +159,7 @@ struct Player {
 struct Wanted {
   f32 heat = 0.0f; // stars are floor(heat), 0..5
   f32 cooldown = 0.0f; // seconds since the last crime seen by a cop
-  f32 bust_timer = 0.0f;
+  f32 arrest_timer = 0.0f;
   f32 spawn_timer = 0.0f;
 };
 
@@ -176,8 +176,8 @@ struct Stats {
   i32 peds_robbed = 0;
   i32 cars_stolen = 0;
   i32 banks_robbed = 0;
-  i32 times_busted = 0;
-  i32 times_wasted = 0;
+  i32 times_arrested = 0;
+  i32 times_killed = 0;
   i32 cash_earned = 0;
 };
 
@@ -215,7 +215,7 @@ struct AssetTable {
 
   // audio
   ox::UUID sfx_engine = {}, sfx_siren = {}, sfx_horn = {}, sfx_gunshot = {}, sfx_punch = {}, sfx_cash = {};
-  ox::UUID sfx_footstep = {}, sfx_door = {}, sfx_crash = {}, sfx_alarm = {}, sfx_pager = {}, sfx_wasted = {};
+  ox::UUID sfx_footstep = {}, sfx_door = {}, sfx_crash = {}, sfx_alarm = {}, sfx_pager = {}, sfx_death = {};
   ox::UUID sfx_radio = {};
 };
 
@@ -287,8 +287,8 @@ public:
   auto commit_crime(this World& self, f32 heat, glm::vec2 where, std::string_view pager) -> void;
   auto update_crime(this World& self, const GameInput& input, f32 dt) -> void;
   auto stars(this const World& self) -> i32;
-  auto bust_player(this World& self) -> void;
-  auto waste_player(this World& self) -> void;
+  auto arrest_player(this World& self) -> void;
+  auto kill_player(this World& self) -> void;
   auto respawn_player(this World& self) -> void;
   auto shoot(this World& self, glm::vec2 from, f32 heading, f32 damage, bool by_player) -> void;
 

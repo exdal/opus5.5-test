@@ -188,7 +188,7 @@ def pager() -> list[float]:
     return lowpass(out, 0.4)
 
 
-def wasted() -> list[float]:
+def death() -> list[float]:
     n = seconds(1.6)
     out, phase = [], 0.0
     for i in range(n):
@@ -230,7 +230,7 @@ def radio(rng) -> list[float]:
 
 def main():
     out_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else OUT_DIR
-    rng = random.Random(1997)  # the year GTA came out
+    rng = random.Random(1997)
     sounds = {
         "engine_loop": engine_loop(),
         "siren": siren(),
@@ -243,7 +243,7 @@ def main():
         "crash": crash(rng),
         "alarm": alarm(),
         "pager": pager(),
-        "wasted": wasted(),
+        "death": death(),
         "radio": radio(rng),
     }
     for name, samples in sounds.items():

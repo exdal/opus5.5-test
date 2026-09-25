@@ -93,7 +93,7 @@ auto World::update_hud(this World& self) -> void {
   const auto dt = 1.0f / 60.0f;
   self.pager_timer = glm::max(0.0f, self.pager_timer - dt);
 
-  // the money counter rolls up like GTA 2's instead of jumping
+  // the money counter rolls up like an old arcade score instead of jumping
   const auto diff = self.player.cash - h.money;
   if (diff != 0) {
     const auto step = glm::max(1, glm::abs(diff) / 12);

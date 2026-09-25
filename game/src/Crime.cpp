@@ -1,5 +1,5 @@
 // Everything that makes the city fight back: wanted level, police cars and cops on foot, the bank heist, cash
-// pickups, gunfire, and the WASTED / BUSTED flow.
+// pickups, gunfire, and the FLATLINED / ARRESTED flow.
 
 #include <glm/common.hpp>
 #include <glm/gtc/constants.hpp>
@@ -13,7 +13,7 @@
 namespace oxcity {
 static constexpr f32 HEIST_TIME = 8.0f;
 static constexpr f32 HEIST_RADIUS = 2.4f;
-static constexpr f32 BUST_RANGE = 1.4f;
+static constexpr f32 ARREST_RANGE = 1.4f;
 
 auto World::stars(this const World& self) -> i32 {
   return glm::clamp(static_cast<i32>(self.wanted.heat), 0, 5);
@@ -119,30 +119,30 @@ auto World::shoot(this World& self, glm::vec2 from, f32 heading, f32 damage, boo
   }
 }
 
-auto World::bust_player(this World& self) -> void {
+auto World::arrest_player(this World& self) -> void {
   if (self.state != GameState::Playing) {
     return;
   }
-  self.stats.times_busted++;
+  self.stats.times_arrested++;
   const auto fine = self.player.cash * 3 / 10;
   self.player.cash -= fine;
   self.player.ammo = 0;
   self.player.weapon = Weapon::Fists;
-  self.set_state(GameState::Busted);
+  self.set_state(GameState::Arrested);
   self.hud.stats = fmt::format("FINE: ${}", fine);
-  self.play(self.assets.sfx_wasted, 0.8f, 1.3f);
+  self.play(self.assets.sfx_death, 0.8f, 1.3f);
 }
 
-auto World::waste_player(this World& self) -> void {
+auto World::kill_player(this World& self) -> void {
   if (self.state != GameState::Playing) {
     return;
   }
-  self.stats.times_wasted++;
+  self.stats.times_killed++;
   const auto bill = glm::min(self.player.cash, 750);
   self.player.cash -= bill;
-  self.set_state(GameState::Wasted);
+  self.set_state(GameState::Dead);
   self.hud.stats = fmt::format("HOSPITAL BILL: ${}", bill);
-  self.play(self.assets.sfx_wasted, 1.0f);
+  self.play(self.assets.sfx_death, 1.0f);
   if (self.player.car == CarID::Invalid) {
     // fall over where you stand
     self.set_entity_pose(
@@ -155,14 +155,14 @@ auto World::waste_player(this World& self) -> void {
 
 auto World::respawn_player(this World& self) -> void {
   auto& p = self.player;
-  const auto busted = self.state == GameState::Busted;
+  const auto arrested = self.state == GameState::Arrested;
   if (p.car != CarID::Invalid) {
     auto& c = self.car(p.car);
     c.player_inside = false;
     c.role = c.model == "police" ? CarRole::Police : CarRole::Abandoned;
     p.car = CarID::Invalid;
   }
-  p.position = busted ? self.police_station : self.hospital;
+  p.position = arrested ? self.police_station : self.hospital;
   p.heading = 0.0f;
   p.health = 100.0f;
   p.invulnerable = 3.0f;
@@ -173,7 +173,7 @@ auto World::respawn_player(this World& self) -> void {
   self.set_entity_pose(p.entity, to3(p.position, 0.4f), yaw_quat(0.0f));
   p.entity.set<ox::CharacterControllerComponent>({.character_height_standing = 1.1f, .character_radius_standing = 0.3f});
 
-  self.pager(busted ? "YOU'RE OUT ON BAIL. TRY NOT TO DO THAT AGAIN." : "PATCHED UP AND BACK ON THE STREET.");
+  self.pager(arrested ? "YOU'RE OUT ON BAIL. TRY NOT TO DO THAT AGAIN." : "PATCHED UP AND BACK ON THE STREET.");
 }
 
 auto World::update_crime(this World& self, const GameInput& input, f32 dt) -> void {
@@ -268,22 +268,22 @@ auto World::update_crime(this World& self, const GameInput& input, f32 dt) -> vo
     }
   }
 
-  // --- busted ---
+  // --- arrested ---
   if (playing && self.stars() > 0) {
     auto cop_on_you = false;
-    const auto reach = self.player.car == CarID::Invalid ? BUST_RANGE : 3.0f;
+    const auto reach = self.player.car == CarID::Invalid ? ARREST_RANGE : 3.0f;
     const auto stopped = self.player.car == CarID::Invalid || glm::length(self.car_velocity(self.player.car)) < 1.0f;
     for (const auto& p : self.peds) {
       if (p.alive && p.kind == PedKind::Cop && p.state != PedState::Driving && glm::distance(p.position, player_pos) < reach) {
         cop_on_you = true;
       }
     }
-    self.wanted.bust_timer = cop_on_you && stopped ? self.wanted.bust_timer + dt : 0.0f;
-    if (self.wanted.bust_timer > 1.5f) {
-      self.bust_player();
+    self.wanted.arrest_timer = cop_on_you && stopped ? self.wanted.arrest_timer + dt : 0.0f;
+    if (self.wanted.arrest_timer > 1.5f) {
+      self.arrest_player();
     }
   } else {
-    self.wanted.bust_timer = 0.0f;
+    self.wanted.arrest_timer = 0.0f;
   }
 
   // --- the bank ---

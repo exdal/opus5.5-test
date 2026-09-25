@@ -51,7 +51,7 @@ World::~World() {
     auto& asset_man = ox::App::mod<ox::AssetManager>();
     const auto& a = this->assets;
     for (const auto* uuid : {&a.sfx_engine, &a.sfx_siren, &a.sfx_horn, &a.sfx_gunshot, &a.sfx_punch, &a.sfx_cash,
-                             &a.sfx_footstep, &a.sfx_door, &a.sfx_crash, &a.sfx_alarm, &a.sfx_pager, &a.sfx_wasted,
+                             &a.sfx_footstep, &a.sfx_door, &a.sfx_crash, &a.sfx_alarm, &a.sfx_pager, &a.sfx_death,
                              &a.sfx_radio}) {
       if (*uuid) {
         asset_man.unload_asset(*uuid);
@@ -119,7 +119,7 @@ auto World::init(this World& self) -> bool {
   a.sfx_crash = find_asset("Audio/crash.wav");
   a.sfx_alarm = find_asset("Audio/alarm.wav");
   a.sfx_pager = find_asset("Audio/pager.wav");
-  a.sfx_wasted = find_asset("Audio/wasted.wav");
+  a.sfx_death = find_asset("Audio/death.wav");
   a.sfx_radio = find_asset("Audio/radio.wav");
 
   if (!a.player || !a.sedan || !a.road_straight) {
@@ -253,8 +253,8 @@ auto World::set_state(this World& self, GameState state) -> void {
   self.hud.menu_visible = state == GameState::MainMenu || state == GameState::Paused;
   self.hud.paused = state == GameState::Paused;
   switch (state) {
-    case GameState::Wasted: self.hud.big_text = "WASTED"; break;
-    case GameState::Busted: self.hud.big_text = "BUSTED"; break;
+    case GameState::Dead: self.hud.big_text = "FLATLINED"; break;
+    case GameState::Arrested: self.hud.big_text = "ARRESTED"; break;
     default               : self.hud.big_text = ""; break;
   }
 }
@@ -288,8 +288,8 @@ auto World::update(this World& self, const GameInput& input, f32 dt) -> void {
       self.update_player(input, dt);
       break;
     }
-    case GameState::Wasted:
-    case GameState::Busted: {
+    case GameState::Dead:
+    case GameState::Arrested: {
       if (self.state_timer > 4.0f) {
         self.respawn_player();
         self.set_state(GameState::Playing);

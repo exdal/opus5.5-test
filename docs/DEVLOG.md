@@ -1,6 +1,6 @@
 # OxCity dev log
 
-A running journal of building a GTA 2 style game ("OxCity") on the Oxylus engine. Written as I go,
+A running journal of building a top-down open-city crime game ("OxCity") on the Oxylus engine. Written as I go,
 in the voice of a game developer picking the engine up for the first time. Pain points are
 summarised and ranked in [`ENGINE_FEEDBACK.md`](ENGINE_FEEDBACK.md); every change to `engine/` is in
 [`ENGINE_CHANGES.md`](ENGINE_CHANGES.md).

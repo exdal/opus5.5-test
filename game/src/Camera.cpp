@@ -1,4 +1,4 @@
-// GTA 2 camera: straight down from high above, zooming out the faster you drive. Behind the menus it slowly
+// classic top-down camera: straight down from high above, zooming out the faster you drive. Behind the menus it slowly
 // drifts over the city as an attract mode.
 
 #include <glm/common.hpp>

@@ -20,11 +20,11 @@ struct VehicleSpec {
 
 // dimensions must match VEHICLE_STYLES in tools/assetgen/models.py
 static constexpr VehicleSpec VEHICLE_SPECS[] = {
-  {"sedan", "COSSIE", 1.9f, 4.4f, 0.62f, 1300.0f, 520.0f, ox::VehicleComponent::DriveMode::RearWheelDrive},
-  {"sports", "FURORE GT", 1.95f, 4.3f, 0.5f, 1150.0f, 760.0f, ox::VehicleComponent::DriveMode::RearWheelDrive},
-  {"taxi", "TAXI", 1.9f, 4.5f, 0.62f, 1350.0f, 500.0f, ox::VehicleComponent::DriveMode::FrontWheelDrive},
+  {"sedan", "MERIDIAN", 1.9f, 4.4f, 0.62f, 1300.0f, 520.0f, ox::VehicleComponent::DriveMode::RearWheelDrive},
+  {"sports", "VOLTA GT", 1.95f, 4.3f, 0.5f, 1150.0f, 760.0f, ox::VehicleComponent::DriveMode::RearWheelDrive},
+  {"taxi", "CITY CAB", 1.9f, 4.5f, 0.62f, 1350.0f, 500.0f, ox::VehicleComponent::DriveMode::FrontWheelDrive},
   {"police", "COP CAR", 1.95f, 4.6f, 0.64f, 1400.0f, 700.0f, ox::VehicleComponent::DriveMode::AllWheelDrive},
-  {"van", "BOX VAN", 2.05f, 4.9f, 0.9f, 1900.0f, 620.0f, ox::VehicleComponent::DriveMode::RearWheelDrive},
+  {"van", "HAULER", 2.05f, 4.9f, 0.9f, 1900.0f, 620.0f, ox::VehicleComponent::DriveMode::RearWheelDrive},
 };
 
 static auto find_spec(std::string_view name) -> const VehicleSpec& {

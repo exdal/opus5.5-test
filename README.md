@@ -1,4 +1,4 @@
-# OxCity — a GTA 2 style game built on Oxylus
+# OxCity: a top-down open-city crime game built on Oxylus
 
 A top-down 3D game (steal cars, drive, rob people and banks, get chased by police) written as a
 field test of the [Oxylus engine](https://github.com/oxylusengine/Oxylus).

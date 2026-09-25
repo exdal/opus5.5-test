@@ -284,10 +284,10 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
       if (in_car) {
         input.enter_exit = glm::fract(self.step_time * 2.0f) < 0.1f;
       }
-      if (world.state == GameState::Busted || world.state == GameState::Wasted) {
+      if (world.state == GameState::Arrested || world.state == GameState::Dead) {
         if (world.state_timer > 1.0f) {
-          self.screenshot(world.state == GameState::Busted ? "busted" : "wasted");
-          self.next(world.state == GameState::Busted ? "got busted" : "got wasted");
+          self.screenshot(world.state == GameState::Arrested ? "arrested" : "flatlined");
+          self.next(world.state == GameState::Arrested ? "got arrested" : "flatlined");
         }
       } else if (self.step_time > 40.0f) {
         self.next("the cops never caught up");
@@ -338,15 +338,15 @@ auto Autoplay::report(this const Autoplay& self, const World& world) -> bool {
     all = all && c.ok;
   }
   OX_LOG_INFO(
-    "  stats: cash ${} earned ${} | banks {} | cars stolen {} | robbed {} | killed {} | busted {} | wasted {} | max stars {}",
+    "  stats: cash ${} earned ${} | banks {} | cars stolen {} | robbed {} | killed {} | arrested {} | flatlined {} | max stars {}",
     world.player.cash,
     world.stats.cash_earned,
     world.stats.banks_robbed,
     world.stats.cars_stolen,
     world.stats.peds_robbed,
     world.stats.peds_killed,
-    world.stats.times_busted,
-    world.stats.times_wasted,
+    world.stats.times_arrested,
+    world.stats.times_killed,
     self.max_stars
   );
   return all;
