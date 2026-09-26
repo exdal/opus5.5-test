@@ -411,3 +411,16 @@ In the first joined frames (screenshots in `captures/net/`):
 - replicated traffic and a police car with its lights going;
 - a pedestrian killed by the client, credited by the host;
 - an arrest: the fine note, then bail and a teleport to the police station.
+
+The full dedicated run (server + ALICE the shooter + BOB the target, 25 minutes of wall clock for about
+80 s of game time) passed every check:
+- ALICE killed a pedestrian (the host credited it).
+- ALICE wasted BOB: the server logged "ALICE wasted BOB", her pager said "YOU WASTED BOB. +1000 PTS", a 2X
+  COMBO popped, and BOB's screen said "WASTED BY ALICE" (`docs/screenshots/mp_shooter_wasted_them.png`,
+  `mp_target_wasted.png`).
+- BOB respawned at the hospital (`mp_target_respawned.png`).
+- ALICE stole a car and drove it 136 m. The car is a Jolt vehicle on the server, driven by her
+  input over the network.
+- ALICE was then shot dead by the police she'd been collecting stars from, which is how it should be.
+
+Snapshots peaked at 1282 bytes, under ENet's 1392-byte MTU, so they never fragment.
