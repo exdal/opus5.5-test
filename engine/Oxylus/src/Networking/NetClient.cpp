@@ -1,5 +1,7 @@
 #include "Networking/NetClient.hpp"
 
+#include <string>
+
 #include "Core/App.hpp"
 #include "Core/Base.hpp"
 #include "Utils/Log.hpp"
@@ -44,7 +46,12 @@ auto NetClient::connect(this NetClient& self, std::string_view host_name, u16 po
   ZoneScoped;
 
   auto address = ENetAddress{};
-  enet_address_set_host(&address, host_name.data());
+  // ENet wants a NUL terminated C string, a string_view doesn't promise one.
+  const auto host_name_str = std::string(host_name);
+  if (enet_address_set_host(&address, host_name_str.c_str()) != 0) {
+    OX_LOG_ERROR("Couldn't resolve host {}", host_name);
+    return false;
+  }
   address.port = port;
   self.remote_peer = enet_host_connect(self.local_host, &address, NET_CHANNEL_COUNT, 0);
   if (!self.remote_peer) {
