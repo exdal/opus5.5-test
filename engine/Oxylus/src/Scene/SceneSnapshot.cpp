@@ -24,8 +24,9 @@ auto SceneSnapshotBuilder::advance(this SceneSnapshotBuilder& self) -> void {
 auto SceneSnapshotBuilder::find_last_acked(this SceneSnapshotBuilder& self) -> option<u8> {
   ZoneScoped;
 
+  // Walk back from the sequence before the current one, newest first.
   for (auto i = 1_u8; i < MAX_SEQUENCES; i++) {
-    auto seq = static_cast<u8>((self.current_sequence + MAX_SEQUENCES - 1) % MAX_SEQUENCES);
+    auto seq = static_cast<u8>((self.current_sequence + MAX_SEQUENCES - i) % MAX_SEQUENCES);
     if (self.acks[seq]) {
       return seq;
     }
