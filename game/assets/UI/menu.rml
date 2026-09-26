@@ -7,13 +7,33 @@
 	<div id="menu" data-if="menu_visible">
 		<div id="title">OXCITY</div>
 		<div id="tagline" data-if="!paused">Steal cars. Rob banks. Don't get arrested.</div>
-		<div id="tagline" data-if="paused">- PAUSED -</div>
+		<div id="tagline" data-if="paused &amp;&amp; !online">- PAUSED -</div>
+		<div id="tagline" data-if="paused &amp;&amp; online">- ONLINE: THE CITY DOESN'T WAIT -</div>
 
-		<div data-if="!settings_open">
+		<div data-if="!settings_open &amp;&amp; !join_open">
 			<button class="button" data-event-click="start" data-if="!paused">NEW GAME</button>
+			<button class="button" data-event-click="open_join" data-if="!paused">MULTIPLAYER</button>
 			<button class="button" data-event-click="start" data-if="paused">RESUME</button>
+			<button class="button" data-event-click="leave_game" data-if="paused &amp;&amp; online">LEAVE GAME</button>
 			<button class="button" data-event-click="open_settings">SETTINGS</button>
 			<button class="button" data-event-click="quit">QUIT</button>
+		</div>
+
+		<!-- multiplayer: host a city or join someone's. The text fields write straight into the data model -->
+		<div id="join" data-if="join_open">
+			<div id="settings-title">MULTIPLAYER</div>
+			<div class="field">
+				<span class="label">NAME</span>
+				<input id="name-input" type="text" maxlength="16" data-value="player_name"/>
+			</div>
+			<div class="field">
+				<span class="label">HOST</span>
+				<input id="address-input" type="text" maxlength="64" data-value="join_address"/>
+			</div>
+			<button class="button" data-event-click="join_game">JOIN GAME</button>
+			<button class="button" data-event-click="host_game">HOST GAME</button>
+			<button class="button" data-event-click="close_join">BACK</button>
+			<div id="join-hint">Up to 4 players. The host needs UDP port {{ host_port }} open. Free-for-all: everyone has their own wanted level.</div>
 		</div>
 
 		<div id="settings" data-if="settings_open">
@@ -27,7 +47,9 @@
 			<button class="button" data-event-click="close_settings">BACK</button>
 		</div>
 
-		<div id="controls">
+		<div id="net-status" data-if="net_status != ''">{{ net_status }}</div>
+
+		<div id="controls" data-if="!join_open">
 			WASD / ARROWS move &amp; drive &#160;&#160; SHIFT sprint &#160;&#160; SPACE handbrake<br/>
 			F / ENTER get in &amp; out (or carjack) &#160;&#160; CTRL / LMB attack &#160;&#160; Q switch weapon<br/>
 			E hold near someone to rob them, or at the bank's green marker to crack the vault<br/>

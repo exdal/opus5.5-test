@@ -307,3 +307,107 @@ One more engine bug came from the owner: every bullet tracer left its shadow beh
 shadow pages and only invalidated pages for moved or added meshes, never for removed ones (patch 13).
 `docs/screenshots/vsm_ghost_shadow_{unpatched,patched}.png` show a van-shaped ghost shadow and the
 clean road after the fix, from the same scripted run with the new pass switched off and on.
+
+## Day 3: multiplayer
+
+The ask: "we have a networking module, implement multiplayer". The owner picked **free-for-all PvP**
+(everyone has their own wanted level and can kill each other), **listen server and a dedicated one**,
+and **up to 4 players**.
+
+### What the engine has
+
+`Oxylus/{include,src}/Networking` is a thin, readable layer over ENet:
+- `NetworkManager::create_server(port, max_clients)` and `create_client()`.
+- `NetServer` and `NetClient`. Each has a `tick(timestep)`, reliable and unreliable channels, and an
+  automatic handshake.
+- An RPC system: `register_proc("name", callback)`, `call_server`, `call_client`, `broadcast_call`.
+  Parameters are a variant of ints, floats, strings, a UUID and a byte array.
+- `SceneSnapshotBuilder`, which reflects every `Networked` flecs entity's components into a byte blob
+  and diffs it against the last acked one.
+
+Two things I only learned by reading the source:
+- `NetworkManager::update` is empty. Nothing talks until you call `tick()` yourself every frame.
+- `tick()` returns true on the send rate you set with `set_tick_rate`. That turned out to be exactly the
+  snapshot clock I wanted.
+
+### Why not the snapshot builder
+
+I read `SceneSnapshotBuilder` first, because "sync the scene" is what it promises. It doesn't fit a game
+built like this one:
+- It memcpys raw component bytes. `RigidBodyComponent` holds a Jolt pointer, names are strings, and
+  neither survives a trip to another process.
+- Entities are keyed by local flecs ids, and nothing maps those between host and client.
+- OxCity's real state isn't in components anyway. A pedestrian is a position, a heading and a state
+  machine in a game struct; the flecs entity only draws it.
+
+Reading it also turned up a bug: `find_last_acked` never used its loop counter (patch 16). So OxCity
+sends its own snapshot through the RPC layer, packed with zpp::bits into the byte-array parameter. The
+whole protocol is seven RPCs: join, welcome, reject, input, snapshot, events and roster
+(`game/src/NetMessages.hpp`).
+
+### The design
+
+- **The host simulates everything.** That's AI, Jolt vehicles, crime, damage and scoring, exactly as in
+  single player. A dedicated server is a host whose local player slot is empty.
+- **Snapshots.** Every tick (30 Hz) the host writes a snapshot of the whole city: 4 players, around 50
+  peds, around 25 cars, pickups and the heist. Positions are 2 cm fixed point and angles 16 bits,
+  which comes to 1.2–1.3 KB, one UDP datagram. It's a full snapshot, no deltas; at this size, deltas
+  would buy complexity and nothing else.
+- **Clients draw the past.** Each client draws the city 100 ms behind the host's clock, blending the two
+  snapshots around that time. Slots carry a generation byte, so a reused ped or car slot respawns the
+  entity instead of sliding the old one across town.
+- **Events.** Anything that happens once (a shot, blood, a sound, a pager message, a kill feed line)
+  is recorded by the same function that plays it on the host. It's shipped reliably with the next
+  snapshot and replayed on the clients through the same function. Sounds became `play_at(sound,
+  where)`, so each machine attenuates against its own listener.
+- **Your own feet are yours.** A client walks its own Jolt character locally and sends its position with
+  its input. The host moves that player's character there if it's plausible: at most sprint speed
+  × 1.5, and not into a wall. When the host moves a player itself (spawn, respawn, into and out of
+  cars), it bumps a teleport counter, and the client snaps to the host's position.
+- **Everything else is the host's call.** That covers driving, shooting, stabbing, carjacking and
+  pickups. Over the internet it's a round trip late; on a LAN you can't tell.
+- **Presses as counters.** One-shot presses (get in the car, switch weapon) travel as counters in the
+  unreliable input stream, so a lost packet can't eat a keypress.
+
+Going from one player to four touched most gameplay files: `World::player` became
+`players[MAX_PLAYERS]`, `by_player` became `PlayerID killer`, and "dead" and "arrested" became
+per-player states instead of screen states. I did that first, alone, and reran the single-player
+autoplay before writing any networking. It passed exactly as before, including a driving check that
+was already failing on this machine.
+
+### Headless, for real this time
+
+The dedicated server is `OxCity --server`: an `App` with no window and only `LuaManager`,
+`AssetManager`, `Physics` and `NetworkManager`. I expected a fight. It builds the city, 22 Jolt
+vehicles and 50 pedestrians in **14 ms** and runs. `Scene` already checks for the renderer and RmlUi,
+and entities spawned from models become bare transforms. The one crash was `App::step` reading the frame
+limit from a render context that doesn't exist (patch 15). The server calls `with_frame_limit(60)` in
+any case, so it doesn't burn a core.
+
+### ENet and IPv6
+
+The first real test failed before any packet was sent: `Failed to create new NetServer for port 7777!`.
+The ENet fork the engine uses only opens IPv6 sockets (dual stack), and this container has no IPv6 at
+all. `socket(AF_INET6)` returns `EAFNOSUPPORT`, so no server and no client can exist (B23). Desktops
+almost always have an IPv6 stack, so players probably won't hit this, but Docker and some CI boxes will.
+For testing I wrote a small `LD_PRELOAD` shim (`tools/netshim/ipv4_fallback.c`). When the IPv6
+socket fails, it hands ENet an IPv4 socket and translates the IPv4-mapped addresses at the edges. It
+never ships; `tools/run_net_test.sh` only loads it when the machine has no IPv6.
+
+### Testing four players on one CPU
+
+`tools/run_net_test.sh` starts a dedicated server and two scripted clients on 127.0.0.1
+(`--net-autoplay shooter|target`, `game/src/NetAutoplay.cpp`), or a scripted listen-server host and
+one client. Each prints a PASS/FAIL list.
+
+The awkward part is time. The clients render through lavapipe at 1–2 fps, and a server that doesn't
+render runs the city in real time around them: in the first run the cops arrested the shooter before
+it had finished turning around. The test now slows the server's clock to the clients' pace
+(`--fixed-dt`).
+
+In the first joined frames (screenshots in `captures/net/`):
+- the scoreboard, the kill feed ("ALICE JOINED") and the other player's name tag, drawn by RmlUi
+  `data-for` over arrays of structs;
+- replicated traffic and a police car with its lights going;
+- a pedestrian killed by the client, credited by the host;
+- an arrest: the fine note, then bail and a teleport to the police station.

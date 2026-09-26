@@ -32,10 +32,73 @@ auto Game::init(this Game& self) -> std::expected<void, std::string> {
     self.autoplay.start_step = self.options.autoplay_from;
   }
 
+  self.net_autoplay.role = self.options.net_autoplay;
+  if (self.options.host_port != 0) {
+    self.world->host_requested = true;
+    self.world->hud.host_port = self.options.host_port;
+  }
+  if (!self.options.join_address.empty()) {
+    self.world->join_requested = true;
+    self.world->hud.join_address = self.options.join_address;
+  }
+
   return {};
 }
 
+auto Game::player_name(this const Game& self) -> std::string {
+  if (!self.options.player_name.empty()) {
+    return self.options.player_name;
+  }
+  return self.world && !self.world->hud.player_name.empty() ? std::string(self.world->hud.player_name) : "PLAYER";
+}
+
+auto Game::rebuild_world(this Game& self, u32 seed) -> bool {
+  ZoneScoped;
+
+  // the scene owns gpu resources, nothing can be in flight when it goes
+  ox::App::get_rendercontext().wait();
+  auto settings = self.world ? self.world->hud : HudData{};
+  self.world.reset();
+  self.world = std::make_unique<World>(seed);
+  if (!self.world->init()) {
+    OX_LOG_ERROR("OxCity: couldn't rebuild the world");
+    return false;
+  }
+  // what the player typed and picked survives the new city
+  self.world->hud.player_name = settings.player_name;
+  self.world->hud.join_address = settings.join_address;
+  return true;
+}
+
+auto Game::handle_net_requests(this Game& self) -> void {
+  auto& w = *self.world;
+  if (w.host_requested) {
+    w.host_requested = false;
+    const auto port = w.hud.host_port > 0 ? static_cast<u16>(w.hud.host_port) : net::DEFAULT_PORT;
+    if (auto* me = w.local_player()) {
+      me->name = self.player_name();
+    }
+    if (self.net.host(w, port, false)) {
+      w.start_game();
+      w.pager(fmt::format("{}. TELL YOUR FRIENDS.", self.net.status_text));
+    }
+    w.hud.net_status = self.net.status_text;
+  }
+  if (w.join_requested) {
+    w.join_requested = false;
+    self.net.join(std::string(w.hud.join_address), self.player_name());
+    w.hud.net_status = self.net.status_text;
+  }
+  if (w.leave_requested) {
+    w.leave_requested = false;
+    self.net.leave();
+    self.rebuild_world(self.options.seed);
+  }
+}
+
 auto Game::deinit(this Game& self) -> std::expected<void, std::string> {
+  // say goodbye before the engine's NetworkManager goes (it asserts every host is gone)
+  self.net.leave();
   // the scene owns gpu resources, nothing can be in flight when it goes
   ox::App::get_rendercontext().wait();
   self.world.reset();
@@ -102,24 +165,56 @@ auto Game::update(this Game& self, const ox::Timestep& timestep) -> void {
   auto dt = self.options.fixed_dt > 0.0f ? self.options.fixed_dt
                                          : glm::clamp(static_cast<f32>(timestep.get_seconds()), 0.001f, 1.0f / 15.0f);
 
-  auto input = self.options.autoplay ? self.autoplay.update(*self.world, dt) : self.read_input();
-  self.world->update(input, dt);
+  auto input = !self.options.net_autoplay.empty() ? self.net_autoplay.update(*self.world, self.net, dt)
+               : self.options.autoplay               ? self.autoplay.update(*self.world, dt)
+                                                     : self.read_input();
 
-  if (!self.options.autoplay || self.options.screenshot_dir.empty() || self.autoplay.pending_screenshot.empty()) {
+  self.handle_net_requests();
+  self.net.poll(*self.world, timestep);
+  if (self.net.rebuild_seed) {
+    // the host's city isn't ours: build theirs, then step into it
+    const auto seed = *self.net.rebuild_seed;
+    self.net.rebuild_seed.reset();
+    if (self.rebuild_world(seed)) {
+      self.world->become_client(self.net.welcome_slot);
+    }
+  }
+  if (self.net.lost_host) {
+    self.net.lost_host = false;
+    const auto why = self.net.status_text;
+    self.net.leave();
+    if (self.world->role == NetRole::Client) {
+      self.rebuild_world(self.options.seed);
+    }
+    self.world->hud.net_status = why;
+    self.world->pager(why);
+  }
+  if (self.net.status == NetSession::Status::Connecting || self.net.status == NetSession::Status::Joined) {
+    self.world->hud.net_status = self.net.status_text;
+  }
+
+  self.world->update(input, dt);
+  self.net.flush(*self.world);
+
+  auto& pending = self.options.net_autoplay.empty() ? self.autoplay.pending_screenshot : self.net_autoplay.pending_screenshot;
+  if (self.options.screenshot_dir.empty() || pending.empty()) {
     self.render_frame();
   } else {
-    auto path = self.options.screenshot_dir / (self.autoplay.pending_screenshot + ".png");
+    auto path = self.options.screenshot_dir / (pending + ".png");
     std::filesystem::create_directories(self.options.screenshot_dir);
     if (self.capture_screenshot(path)) {
       OX_LOG_INFO("OxCity: wrote screenshot {}", path.string());
     }
   }
-  self.autoplay.pending_screenshot.clear();
+  pending.clear();
 
   self.frame++;
   const auto out_of_frames = self.options.frame_limit > 0 && self.frame >= static_cast<u64>(self.options.frame_limit);
   if (self.world->quit_requested || out_of_frames) {
-    if (self.options.autoplay) {
+    if (!self.options.net_autoplay.empty()) {
+      const auto passed = self.net_autoplay.report(*self.world, self.net);
+      OX_LOG_INFO("OxCity: net autoplay ({}) {}", self.options.net_autoplay, passed ? "PASSED" : "FAILED");
+    } else if (self.options.autoplay) {
       const auto passed = self.autoplay.report(*self.world);
       OX_LOG_INFO("OxCity: autoplay {}", passed ? "PASSED" : "FAILED");
     }

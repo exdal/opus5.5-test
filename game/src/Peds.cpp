@@ -25,12 +25,12 @@ static auto block_center_of(const World& world, glm::vec2 p) -> glm::vec2 {
          0.5f;
 }
 
-static auto ground_height(const World& world, glm::vec2 p) -> f32 {
-  const auto t = world.world_to_tile(p);
+auto World::ground_height(this const World& self, glm::vec2 p) -> f32 {
+  const auto t = self.world_to_tile(p);
   if (t.x < 0 || t.y < 0 || t.x >= CITY_TILES || t.y >= CITY_TILES) {
     return 0.0f;
   }
-  return world.is_road_tile(t.x, t.y) ? 0.0f : 0.15f;
+  return self.is_road_tile(t.x, t.y) ? 0.0f : 0.15f;
 }
 
 static auto next_wander_target(World& world, const Ped& ped) -> glm::vec2 {
@@ -79,13 +79,13 @@ auto World::panic_around(this World& self, glm::vec2 position, f32 radius) -> vo
   }
 }
 
-auto World::kill_ped(this World& self, PedID id, glm::vec2 impulse, bool by_player) -> void {
+auto World::kill_ped(this World& self, PedID id, glm::vec2 impulse, PlayerID killer) -> void {
   auto& p = self.ped(id);
   if (!p.alive) {
     return;
   }
   // run overs (big impulse) get the bigger splash
-  self.on_kill(p.position, impulse, by_player, glm::length(impulse) > 6.0f);
+  self.on_kill(p.position, impulse, killer, glm::length(impulse) > 6.0f);
   p.alive = false;
   p.state = PedState::Dead;
   p.health = 0.0f;
@@ -98,11 +98,13 @@ auto World::kill_ped(this World& self, PedID id, glm::vec2 impulse, bool by_play
     self.spawn_pickup(p.position, p.cash, p.kind == PedKind::Civilian ? 0 : 12);
     p.cash = 0;
   }
-  self.stats.peds_killed++;
+  if (killer != PlayerID::Invalid) {
+    self.pl(killer).stats.peds_killed++;
+  }
   self.panic_around(p.position, 18.0f);
 }
 
-auto World::damage_ped(this World& self, PedID id, f32 amount, glm::vec2 from, bool by_player) -> void {
+auto World::damage_ped(this World& self, PedID id, f32 amount, glm::vec2 from, PlayerID attacker) -> void {
   auto& p = self.ped(id);
   if (!p.alive) {
     return;
@@ -111,7 +113,7 @@ auto World::damage_ped(this World& self, PedID id, f32 amount, glm::vec2 from, b
   const auto away = p.position - from;
   const auto dir = glm::length2(away) > 0.001f ? glm::normalize(away) : glm::vec2(0.0f, 1.0f);
   if (p.health <= 0.0f) {
-    self.kill_ped(id, dir * 5.0f, by_player);
+    self.kill_ped(id, dir * 5.0f, attacker);
     return;
   }
   // wounded: a spurt, and a few drops on the pavement
@@ -133,8 +135,6 @@ auto World::damage_ped(this World& self, PedID id, f32 amount, glm::vec2 from, b
 auto World::update_peds(this World& self, f32 dt) -> void {
   ZoneScoped;
 
-  const auto player_pos = self.player_position();
-  const auto player_on_foot = self.player.car == CarID::Invalid && self.state == GameState::Playing;
   auto civilians_alive = 0;
 
   for (usize i = 0; i < self.peds.size(); i++) {
@@ -158,9 +158,9 @@ auto World::update_peds(this World& self, f32 dt) -> void {
         p.position = slid;
       }
       const auto lying = yaw_quat(p.heading) * glm::angleAxis(-glm::half_pi<f32>() * p.fall, glm::vec3(1.0f, 0.0f, 0.0f));
-      self.set_entity_pose(p.entity, to3(p.position, ground_height(self, p.position) + 0.12f * p.fall), lying);
+      self.set_entity_pose(p.entity, to3(p.position, self.ground_height(p.position) + 0.12f * p.fall), lying);
       // bodies are cleared away once nobody is looking
-      if (p.dead_time > 20.0f && glm::distance(p.position, player_pos) > 45.0f) {
+      if (p.dead_time > 20.0f && self.distance_to_players(p.position) > 45.0f) {
         p.entity.destruct();
         p.entity = {};
       }
@@ -185,7 +185,10 @@ auto World::update_peds(this World& self, f32 dt) -> void {
 
     auto desired = glm::vec2(0.0f);
     auto speed = PED_WALK;
-    const auto to_player = player_pos - p.position;
+    // who this ped reacts to: cops go for the nearest player the police want, everyone else for the nearest player
+    auto threat = p.kind == PedKind::Cop && p.state == PedState::Chase ? self.nearest_player(p.position, 200.0f, true)
+                                                                         : self.nearest_player(p.position, 200.0f);
+    const auto to_player = threat != PlayerID::Invalid ? self.player_position(threat) - p.position : glm::vec2(1000.0f);
     const auto player_dist = glm::length(to_player);
 
     switch (p.state) {
@@ -217,8 +220,8 @@ auto World::update_peds(this World& self, f32 dt) -> void {
       case PedState::Chase:
       case PedState::Attack: {
         speed = p.kind == PedKind::Cop ? COP_RUN : PED_RUN * 0.8f;
-        const auto hunting = self.stars() > 0 || p.state == PedState::Attack;
-        if (!hunting || self.state != GameState::Playing) {
+        const auto hunting = threat != PlayerID::Invalid && (self.stars(threat) > 0 || p.state == PedState::Attack);
+        if (!hunting) {
           p.state = p.kind == PedKind::Guard ? PedState::Idle : PedState::Wander;
           break;
         }
@@ -226,14 +229,14 @@ auto World::update_peds(this World& self, f32 dt) -> void {
           desired = to_player;
         }
         // cops shoot from three stars up, guards whenever the alarm rings
-        const auto armed = p.kind == PedKind::Guard || self.stars() >= 3;
+        const auto armed = p.kind == PedKind::Guard || self.stars(threat) >= 3;
         if (armed && player_dist < 16.0f && p.attack_cooldown <= 0.0f) {
           // guards are nervous shots, the heist is meant to be survivable if you keep drilling
           const auto guard = p.kind == PedKind::Guard;
           p.attack_cooldown = guard ? self.random_float(1.2f, 2.2f) : self.random_float(0.8f, 1.5f);
           const auto spread = guard ? 0.2f : 0.12f;
           const auto aim_error = self.random_float(-spread, spread);
-          self.shoot(p.position + glm::normalize(to_player) * 0.5f, heading_of(to_player) + aim_error, guard ? 4.0f : 6.0f, false);
+          self.shoot(p.position + glm::normalize(to_player) * 0.5f, heading_of(to_player) + aim_error, guard ? 4.0f : 6.0f, PlayerID::Invalid);
           if (player_dist < 5.0f) {
             desired = {}; // stand and shoot
           }
@@ -268,8 +271,10 @@ auto World::update_peds(this World& self, f32 dt) -> void {
       p.velocity = {};
     }
 
-    self.animate_limbs(p.limbs, p.walk_phase, glm::min(1.0f, glm::length(p.velocity) / PED_WALK), p.attack_cooldown > 0.5f ? 1.0f : 0.0f);
-    self.set_entity_pose(p.entity, to3(p.position, ground_height(self, p.position)), yaw_quat(p.heading));
+    p.anim_speed = glm::length(p.velocity);
+    p.punch = p.attack_cooldown > 0.5f ? 1.0f : 0.0f;
+    self.animate_limbs(p.limbs, p.walk_phase, glm::min(1.0f, p.anim_speed / PED_WALK), p.punch);
+    self.set_entity_pose(p.entity, to3(p.position, self.ground_height(p.position)), yaw_quat(p.heading));
     (void)id;
   }
 
@@ -277,12 +282,11 @@ auto World::update_peds(this World& self, f32 dt) -> void {
   if (civilians_alive < MAX_PEDS - 4) {
     for (i32 attempt = 0; attempt < 8; attempt++) {
       const auto p = self.random_sidewalk_point();
-      if (glm::distance(p, player_pos) > 45.0f) {
+      if (self.distance_to_players(p) > 45.0f) {
         self.spawn_ped(PedKind::Civilian, p);
         break;
       }
     }
   }
-  (void)player_on_foot;
 }
 } // namespace oxcity

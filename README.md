@@ -28,6 +28,10 @@ sidewalk, rob the bank on the north side, and try to lose the cops before they a
   bound to one data model.
 - Procedural low-poly models and synthesized sound effects, both generated from scripts in
   `tools/assetgen`.
+- **Multiplayer**, free-for-all for up to 4 players over the engine's networking module (ENet): host
+  from the menu (a listen server), join by address, or run a windowless dedicated server. Everyone has
+  their own wanted level, cash and score; players can shoot, stab, carjack and run each other over.
+  See [Multiplayer](#multiplayer).
 
 Controls: **WASD/arrows** move and drive, **Shift** sprint, **Space** handbrake, **F/Enter** get in
 and out, **Ctrl/LMB** attack, **Q** switch weapon, **E** rob, **H** horn, **Esc** pause.
@@ -73,3 +77,33 @@ tools/run_headless.sh --autoplay --frames 3000 --fixed-dt 0.0333 --screenshots c
 `--autoplay` plays the game from a script: menu, steal a car, drive, mug someone, shoot, rob the bank,
 run from the cops, get arrested, respawn. It takes screenshots on the way and prints a pass/fail
 checklist at the end.
+
+## Multiplayer
+
+Up to 4 players, free-for-all: every player has their own cash, wanted level and cops; bullets, knives
+and bumpers hurt other players too. Wasting a player is worth 1000 points, and whatever cash they had on
+them (up to $750) drops on the pavement for whoever gets there first. The scoreboard, a kill feed and name
+tags over other players' heads are RmlUi documents like the rest of the HUD.
+
+- **From the menu:** MULTIPLAYER, type your name, then HOST GAME (you play and host) or type the host's
+  address and JOIN GAME. `host:port` works, the default port is **UDP 7777** (open it on the host's
+  firewall/router to play over the internet). ESC in a game brings up the menu without pausing (the
+  city doesn't wait online); LEAVE GAME goes back to single player.
+- **From the command line:** `OxCity --host [PORT] --name ALICE`, `OxCity --join 1.2.3.4[:PORT] --name BOB`.
+- **Dedicated server:** `OxCity --server [PORT]` runs the city with no window, no GPU and no audio. It
+  logs joins, leaves, kills and a status line every 10 seconds.
+
+Host and clients have to be built from the same source (the protocol version is checked on join), and
+they build the same city from the same seed (`--seed`, default 1999). A client joining a host with a
+different seed rebuilds its city to match.
+
+How it works, in short (details in `game/src/Replication.cpp` and [DEVLOG](docs/DEVLOG.md#day-3-multiplayer)):
+the host simulates everything (AI, Jolt, crime, damage) and sends a quantized snapshot of the whole city
+30 times a second, about 1.2 KB. Clients draw it 100 ms in the past, blending two snapshots, and replay
+the effects and sounds the host recorded. Your own walking is simulated on your machine, so it has no
+lag; the host checks it's plausible. Driving and shooting are decided by the host, so over the internet
+they are one round trip behind your keys.
+
+Testing it on one machine, headless: `tools/run_net_test.sh dedicated` (a dedicated server and two
+scripted clients, one hunting the other) or `tools/run_net_test.sh listen` (a scripted host and one
+client). Each scripted player prints a PASS/FAIL checklist; screenshots go to `captures/net/`.

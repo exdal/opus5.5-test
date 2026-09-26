@@ -56,12 +56,13 @@ auto World::car_velocity(this const World& self, CarID id) -> glm::vec3 {
     const auto v = body->GetLinearVelocity();
     return {v.GetX(), v.GetY(), v.GetZ()};
   }
-  return {};
+  // a client's cars have no body, the host told us how fast they go
+  return self.car(id).net_velocity;
 }
 
 auto World::drive_car(this World& self, CarID id, f32 throttle, f32 steer, f32 brake, f32 handbrake) -> void {
   auto& c = self.car(id);
-  if (!c.entity.is_alive() || !c.entity.has<ox::VehicleComponent>()) {
+  if (!c.entity || !c.entity.is_alive() || !c.entity.has<ox::VehicleComponent>()) {
     return;
   }
   // get_mut and no modified(): VehicleComponent's OnSet observer rebuilds the whole constraint, which is what
@@ -89,20 +90,22 @@ auto World::teleport_car(this World& self, CarID id, glm::vec2 position, f32 yaw
   bi.SetLinearAndAngularVelocity(body->GetID(), JPH::Vec3::sZero(), JPH::Vec3::sZero());
 }
 
-auto World::damage_car(this World& self, CarID id, f32 amount, bool by_player) -> void {
+auto World::damage_car(this World& self, CarID id, f32 amount, PlayerID attacker) -> void {
   auto& c = self.car(id);
   if (!c.alive) {
     return;
   }
   c.health -= amount;
-  c.last_hit_by_player = c.last_hit_by_player || by_player;
+  if (attacker != PlayerID::Invalid) {
+    c.last_hit_by = attacker;
+  }
   if (c.health <= 0.0f && !c.exploded) {
     // shot or smashed to pieces: it goes up. Marked first, the blast can reach this car again through a chain
     c.exploded = true;
-    if (c.player_inside) {
-      self.damage_player(80.0f);
+    if (c.player_driver != PlayerID::Invalid) {
+      self.damage_player(c.player_driver, 80.0f, c.last_hit_by);
     }
-    self.explode(self.car_position(id), c.last_hit_by_player);
+    self.explode(self.car_position(id), c.last_hit_by);
   }
   if (c.health <= 0.0f && c.role != CarRole::Abandoned) {
     // wrecked: engine dies, the driver bails
@@ -116,7 +119,7 @@ auto World::damage_car(this World& self, CarID id, f32 amount, bool by_player) -
       self.set_entity_pose(driver.entity, to3(driver.position, 0.15f), yaw_quat(driver.heading));
       c.driver = PedID::Invalid;
     }
-    if (!c.player_inside) {
+    if (c.player_driver == PlayerID::Invalid) {
       c.role = CarRole::Abandoned;
     }
   }
@@ -215,8 +218,10 @@ auto World::car_ai_follow_roads(this World& self, CarID id, f32 dt) -> void {
       speed = 0.0f;
     }
   }
-  if (self.player.car == CarID::Invalid && blocked(self.player.position, 7.0f)) {
-    speed = 0.0f;
+  for (auto pid : ALL_PLAYERS) {
+    if (self.on_foot(pid) && blocked(self.pl(pid).position, 7.0f)) {
+      speed = 0.0f;
+    }
   }
   if (glm::distance(pos, to) < 16.0f) {
     speed = glm::min(speed, 6.0f);
@@ -225,7 +230,8 @@ auto World::car_ai_follow_roads(this World& self, CarID id, f32 dt) -> void {
   steer_to(self, id, aim, speed, dt);
 }
 
-auto World::car_ai_chase(this World& self, CarID id, glm::vec2 target, f32 dt) -> void {
+auto World::car_ai_chase(this World& self, CarID id, PlayerID suspect, f32 dt) -> void {
+  const auto target = self.player_position(suspect);
   auto& c = self.car(id);
   const auto pos = self.car_position(id);
   auto aim = target;
@@ -256,7 +262,7 @@ auto World::car_ai_chase(this World& self, CarID id, glm::vec2 target, f32 dt) -
   }
 
   const auto dist = glm::distance(pos, target);
-  const auto on_foot = self.player.car == CarID::Invalid;
+  const auto on_foot = self.pl(suspect).car == CarID::Invalid;
   // on foot the cops pull up next to you, in a car they ram you
   const auto speed = on_foot && dist < 14.0f ? 0.0f : 16.0f;
   steer_to(self, id, aim, speed, dt);
@@ -266,13 +272,13 @@ auto World::car_ai_chase(this World& self, CarID id, glm::vec2 target, f32 dt) -
   c.cruise_speed = speed;
 }
 
-auto World::update_vehicles(this World& self, const GameInput& input, f32 dt) -> void {
+auto World::update_vehicles(this World& self, f32 dt) -> void {
   ZoneScoped;
 
   for (usize i = 0; i < self.cars.size(); i++) {
     const auto id = static_cast<CarID>(i);
     auto& c = self.cars[i];
-    if (!c.alive || !c.entity.is_alive()) {
+    if (!c.alive || !c.entity || !c.entity.is_alive()) {
       continue;
     }
 
@@ -282,8 +288,12 @@ auto World::update_vehicles(this World& self, const GameInput& input, f32 dt) ->
     const auto speed = glm::length(velocity);
     const auto forward_speed = glm::dot(to2(velocity), forward_of(heading));
 
-    if (c.player_inside) {
-      if (self.state == GameState::Playing) {
+    const auto driver = c.player_driver;
+    if (driver != PlayerID::Invalid) {
+      // offline the pause menu takes the wheel away; online the car keeps doing what its driver says
+      const auto driving = self.in_play(driver) && (self.role != NetRole::Offline || self.state == GameState::Playing);
+      if (driving) {
+        const auto& input = self.pl(driver).input;
         auto throttle = input.throttle;
         auto brake = 0.0f;
         // the brake pedal and reverse share a key, like every arcade racer
@@ -301,8 +311,9 @@ auto World::update_vehicles(this World& self, const GameInput& input, f32 dt) ->
         self.drive_car(id, 0.0f, 0.0f, 1.0f, 1.0f);
       }
     } else if (c.health > 0.0f && c.driver != PedID::Invalid) {
-      if (c.role == CarRole::Police && self.stars() > 0) {
-        self.car_ai_chase(id, self.player_position(), dt);
+      const auto suspect = c.role == CarRole::Police ? self.nearest_player(pos, 250.0f, true) : PlayerID::Invalid;
+      if (suspect != PlayerID::Invalid) {
+        self.car_ai_chase(id, suspect, dt);
       } else {
         self.car_ai_follow_roads(id, dt);
       }
@@ -312,7 +323,7 @@ auto World::update_vehicles(this World& self, const GameInput& input, f32 dt) ->
 
     // sirens blink while chasing
     if (c.siren_red && c.siren_blue) {
-      const auto chasing = c.role == CarRole::Police && (self.stars() > 0 || c.player_inside);
+      const auto chasing = c.role == CarRole::Police && (self.total_stars() > 0 || driver != PlayerID::Invalid);
       const auto phase = glm::fract(self.time * 3.0f) < 0.5f;
       const auto red = !chasing || phase ? glm::vec3(1.0f) : glm::vec3(0.01f);
       const auto blue = !chasing || !phase ? glm::vec3(1.0f) : glm::vec3(0.01f);
@@ -325,15 +336,13 @@ auto World::update_vehicles(this World& self, const GameInput& input, f32 dt) ->
     // crashes: a big change in velocity between frames
     const auto dv = glm::length(velocity - c.last_velocity);
     if (dv > 7.0f && glm::length(c.last_velocity) > 5.0f) {
-      self.damage_car(id, dv * 2.5f, c.player_inside);
+      self.damage_car(id, dv * 2.5f, driver);
       if (dv > 12.0f) {
         self.impact_sparks(to3(pos, 0.6f), -to2(c.last_velocity));
       }
-      if (glm::distance(pos, self.player_position()) < 40.0f) {
-        self.play(self.assets.sfx_crash, glm::clamp(dv / 20.0f, 0.3f, 1.0f));
-      }
-      if (c.player_inside) {
-        self.damage_player(glm::max(0.0f, dv - 12.0f) * 2.0f);
+      self.play_at(self.assets.sfx_crash, pos, glm::clamp(dv / 20.0f, 0.3f, 1.0f), 1.0f, 40.0f);
+      if (driver != PlayerID::Invalid) {
+        self.damage_player(driver, glm::max(0.0f, dv - 12.0f) * 2.0f);
       }
     }
     c.last_velocity = velocity;
@@ -354,16 +363,22 @@ auto World::update_vehicles(this World& self, const GameInput& input, f32 dt) ->
       if (!ped.alive || ped.state == PedState::Driving || !inside(ped.position, 0.3f)) {
         continue;
       }
-      self.kill_ped(static_cast<PedID>(k), to2(velocity) * 0.6f, c.player_inside);
-      self.play(self.assets.sfx_punch, 1.0f, 0.6f);
-      if (c.player_inside) {
-        self.commit_crime(ped.kind == PedKind::Cop ? 2.0f : 0.7f, pos, "");
+      self.kill_ped(static_cast<PedID>(k), to2(velocity) * 0.6f, driver);
+      self.play_at(self.assets.sfx_punch, ped.position, 1.0f, 0.6f);
+      if (driver != PlayerID::Invalid) {
+        self.commit_crime(driver, ped.kind == PedKind::Cop ? 2.0f : 0.7f, pos, "");
       }
     }
-    if (!c.player_inside && self.player.car == CarID::Invalid && self.state == GameState::Playing &&
-        inside(self.player.position, 0.2f)) {
-      self.damage_player(speed * 3.0f);
-      self.play(self.assets.sfx_punch, 1.0f, 0.5f);
+    // players on foot in the way, including the other players' bumpers
+    for (auto pid : ALL_PLAYERS) {
+      if (pid == driver || !self.on_foot(pid) || !inside(self.pl(pid).position, 0.2f)) {
+        continue;
+      }
+      self.damage_player(pid, speed * 3.0f, driver);
+      self.play_at(self.assets.sfx_punch, self.pl(pid).position, 1.0f, 0.5f);
+      if (driver != PlayerID::Invalid) {
+        self.commit_crime(driver, 0.7f, pos, "");
+      }
     }
   }
 }

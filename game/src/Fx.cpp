@@ -103,13 +103,14 @@ auto World::emit(this World& self, FxPool& pool, glm::vec3 position, glm::vec3 v
 }
 
 auto World::blood_burst(this World& self, glm::vec2 position, glm::vec2 direction, u32 count) -> void {
+  self.record({.kind = net::EventKind::BloodBurst, .asset = static_cast<u16>(count), .f = {position.x, position.y, direction.x, direction.y}});
   const auto dir = glm::length2(direction) > 0.0001f ? glm::normalize(direction) : glm::vec2(0.0f);
   // thrown hard along the hit, like it came out the other side
   self.emit(self.fx_blood, to3(position, 1.0f), glm::vec3(dir.x * 5.5f, 1.2f, dir.y * 5.5f), count);
 }
 
 auto World::place_decal(this World& self, const ox::UUID& model, glm::vec2 position, f32 yaw, glm::vec3 scale) -> void {
-  if (!model) {
+  if (!model || self.headless) {
     return;
   }
   // slightly above the ground, and each decal a hair higher than the last so overlapping splats don't z-fight
@@ -146,11 +147,13 @@ auto World::place_decal(this World& self, const ox::UUID& model, glm::vec2 posit
 }
 
 auto World::blood_decal(this World& self, glm::vec2 position, f32 size) -> void {
+  self.record({.kind = net::EventKind::BloodDecal, .f = {position.x, position.y, size}});
   const auto model = self.assets.blood_decals[static_cast<usize>(self.random_int(0, 3))];
   self.place_decal(model, position, self.random_float(0.0f, glm::two_pi<f32>()), glm::vec3(size, 1.0f, size));
 }
 
 auto World::blood_streak(this World& self, glm::vec2 position, glm::vec2 direction, f32 length, f32 width) -> void {
+  self.record({.kind = net::EventKind::BloodStreak, .f = {position.x, position.y, direction.x, direction.y, length, width}});
   if (glm::length2(direction) < 0.0001f) {
     direction = forward_of(self.random_float(0.0f, glm::two_pi<f32>()));
   }
@@ -162,23 +165,25 @@ auto World::blood_streak(this World& self, glm::vec2 position, glm::vec2 directi
 }
 
 auto World::muzzle_flash(this World& self, glm::vec2 muzzle, f32 heading) -> void {
+  self.record({.kind = net::EventKind::Muzzle, .f = {muzzle.x, muzzle.y, heading}});
   const auto fwd = forward_of(heading);
   self.emit(self.fx_muzzle, to3(muzzle, BULLET_HEIGHT), glm::vec3(fwd.x, 0.0f, fwd.y) * 4.0f, 10);
 }
 
 auto World::impact_sparks(this World& self, glm::vec3 position, glm::vec2 direction) -> void {
+  self.record({.kind = net::EventKind::Sparks, .f = {position.x, position.y, position.z, direction.x, direction.y}});
   const auto dir = glm::length2(direction) > 0.0001f ? glm::normalize(direction) : glm::vec2(0.0f);
   self.emit(self.fx_sparks, position, glm::vec3(dir.x, 0.2f, dir.y) * 2.0f, 16);
 }
 
 // burnt out: every mesh of the wreck gets the charcoal material through the MeshComponent's material override
-static auto char_wreck(World& self, flecs::entity root) -> void {
+auto char_wreck(World& self, flecs::entity root) -> void {
   auto& asset_man = ox::App::mod<ox::AssetManager>();
   auto burnt = ox::UUID{};
   if (auto fx = asset_man.get_model(self.assets.fx); fx && fx->materials.size() > 1) {
     burnt = fx->materials[1];
   }
-  if (!burnt || !root.is_alive()) {
+  if (!burnt || !root || !root.is_alive()) {
     return;
   }
   auto visit = [&](auto& visit_ref, flecs::entity e) -> void {
@@ -191,15 +196,47 @@ static auto char_wreck(World& self, flecs::entity root) -> void {
   visit(visit, root);
 }
 
-auto World::explode(this World& self, glm::vec2 position, bool by_player) -> void {
+auto World::explode(this World& self, glm::vec2 position, PlayerID attacker) -> void {
+  self.explode_fx(position);
+
+  // everything close by gets hurt: people die, other cars take enough damage to chain react
+  for (usize i = 0; i < self.peds.size(); i++) {
+    auto& ped = self.peds[i];
+    if (ped.alive && ped.state != PedState::Driving && glm::distance(ped.position, position) < EXPLOSION_RADIUS) {
+      self.kill_ped(static_cast<PedID>(i), (ped.position - position) * 3.0f, attacker);
+    }
+  }
+  for (auto id : ALL_PLAYERS) {
+    if (!self.in_play(id)) {
+      continue;
+    }
+    const auto distance = glm::distance(self.player_position(id), position);
+    if (distance < EXPLOSION_RADIUS + 1.0f) {
+      self.damage_player(id, 90.0f * (1.0f - distance / (EXPLOSION_RADIUS + 1.0f)) + 10.0f, attacker);
+    }
+  }
+  for (usize i = 0; i < self.cars.size(); i++) {
+    const auto id = static_cast<CarID>(i);
+    const auto& c = self.cars[i];
+    if (c.alive && !c.exploded && glm::distance(self.car_position(id), position) < EXPLOSION_RADIUS + 2.0f) {
+      self.damage_car(id, 60.0f, attacker);
+    }
+  }
+}
+
+auto World::explode_fx(this World& self, glm::vec2 position) -> void {
+  self.record({.kind = net::EventKind::Explosion, .f = {position.x, position.y}});
   // above the roof: particles are depth tested against the scene, emitted inside the car body they'd stay hidden
   const auto at = to3(position, 2.2f);
   self.emit(self.fx_explosion, at, glm::vec3(0.0f, 2.0f, 0.0f), 200);
   self.emit(self.fx_smoke, at, glm::vec3(0.0f, 1.5f, 0.0f), 60);
-  for (usize i = 0; i < self.cars.size(); i++) {
-    const auto& c = self.cars[i];
-    if (c.alive && c.exploded && c.entity.is_alive() && glm::distance(self.car_position(static_cast<CarID>(i)), position) < 0.1f) {
-      char_wreck(self, c.entity);
+  // the wreck itself: the host knows which car it was; clients char it when the snapshot says it blew up
+  if (self.authority()) {
+    for (usize i = 0; i < self.cars.size(); i++) {
+      const auto& c = self.cars[i];
+      if (c.alive && c.exploded && c.entity.is_alive() && glm::distance(self.car_position(static_cast<CarID>(i)), position) < 0.1f) {
+        char_wreck(self, c.entity);
+      }
     }
   }
   self.emit(self.fx_sparks, at, glm::vec3(0.0f, 3.0f, 0.0f), 80);
@@ -208,7 +245,7 @@ auto World::explode(this World& self, glm::vec2 position, bool by_player) -> voi
     self.place_decal(self.assets.scorch_decals[static_cast<usize>(self.random_int(0, 1))], position,
                      self.random_float(0.0f, glm::two_pi<f32>()), glm::vec3(size, 1.0f, size));
   }
-  self.play(self.assets.sfx_explosion, 1.0f, self.random_float(0.9f, 1.05f));
+  self.play_at(self.assets.sfx_explosion, position, 1.0f, self.random_float(0.9f, 1.05f), 120.0f);
 
   if (!self.flashes.empty()) {
     auto& flash = self.flashes[self.next_flash % self.flashes.size()];
@@ -217,31 +254,18 @@ auto World::explode(this World& self, glm::vec2 position, bool by_player) -> voi
     self.set_entity_pose(flash.entity, to3(position, 2.5f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
   }
 
-  // everything close by gets hurt: people die, other cars take enough damage to chain react
+  // felt more than seen: the closer to the local screen, the harder it kicks
   auto& j = self.juice;
-  j.shake = 1.0f;
-  j.hitstop = glm::max(j.hitstop, 0.09f);
-  j.flash = glm::max(j.flash, 0.5f);
-  for (usize i = 0; i < self.peds.size(); i++) {
-    auto& ped = self.peds[i];
-    if (ped.alive && ped.state != PedState::Driving && glm::distance(ped.position, position) < EXPLOSION_RADIUS) {
-      self.kill_ped(static_cast<PedID>(i), (ped.position - position) * 3.0f, by_player);
-    }
-  }
-  const auto player_distance = glm::distance(self.player_position(), position);
-  if (player_distance < EXPLOSION_RADIUS + 1.0f) {
-    self.damage_player(90.0f * (1.0f - player_distance / (EXPLOSION_RADIUS + 1.0f)) + 10.0f);
-  }
-  for (usize i = 0; i < self.cars.size(); i++) {
-    const auto id = static_cast<CarID>(i);
-    const auto& c = self.cars[i];
-    if (c.alive && !c.exploded && glm::distance(self.car_position(id), position) < EXPLOSION_RADIUS + 2.0f) {
-      self.damage_car(id, 60.0f, by_player);
-    }
+  const auto felt = glm::clamp(1.0f - glm::distance(self.listener_position(), position) / 60.0f, 0.0f, 1.0f);
+  j.shake = glm::max(j.shake, felt);
+  j.flash = glm::max(j.flash, 0.5f * felt);
+  if (self.role == NetRole::Offline) {
+    j.hitstop = glm::max(j.hitstop, 0.09f);
   }
 }
 
 auto World::shell_casing(this World& self, glm::vec2 position, f32 heading) -> void {
+  self.record({.kind = net::EventKind::Casing, .f = {position.x, position.y, heading}});
   // ejected to the right of the gun, a little back
   const auto fwd = forward_of(heading);
   const auto right = right_of(fwd);
@@ -250,10 +274,12 @@ auto World::shell_casing(this World& self, glm::vec2 position, f32 heading) -> v
 }
 
 auto World::cash_sparkle(this World& self, glm::vec2 position) -> void {
+  self.record({.kind = net::EventKind::Sparkle, .f = {position.x, position.y}});
   self.emit(self.fx_sparkle, to3(position, 0.3f), glm::vec3(0.0f, 1.0f, 0.0f), 40);
 }
 
 auto World::drill_sparks(this World& self, glm::vec2 position) -> void {
+  self.record({.kind = net::EventKind::Drill, .f = {position.x, position.y}});
   self.emit(self.fx_sparks, to3(position, 1.0f), glm::vec3(0.0f, 0.5f, 0.0f), 6);
 }
 
@@ -262,12 +288,12 @@ auto World::update_car_fx(this World& self, f32 dt) -> void {
   for (usize i = 0; i < self.cars.size(); i++) {
     const auto id = static_cast<CarID>(i);
     auto& c = self.cars[i];
-    if (!c.alive || !c.entity.is_alive()) {
+    if (!c.alive || !c.entity || !c.entity.is_alive()) {
       continue;
     }
     const auto pos = self.car_position(id);
     // only where the camera could plausibly see it
-    if (glm::distance(pos, self.player_position()) > 60.0f) {
+    if (glm::distance(pos, self.listener_position()) > 60.0f) {
       continue;
     }
     const auto fwd = forward_of(self.car_heading(id));
@@ -299,7 +325,7 @@ auto World::update_car_fx(this World& self, f32 dt) -> void {
   }
 }
 
-auto World::on_kill(this World& self, glm::vec2 position, glm::vec2 direction, bool by_player, bool big) -> void {
+auto World::on_kill(this World& self, glm::vec2 position, glm::vec2 direction, PlayerID killer, bool big) -> void {
   self.blood_burst(position, direction, big ? 180 : 130);
   // a pool where they drop, and the spatter thrown out behind them along the hit, longer for harder hits
   self.blood_decal(position, self.random_float(1.1f, 1.7f) * (big ? 1.3f : 1.0f));
@@ -311,20 +337,33 @@ auto World::on_kill(this World& self, glm::vec2 position, glm::vec2 direction, b
                         self.random_float(1.5f, 2.5f), 1.0f);
     }
   }
-  self.play(self.assets.sfx_splat, 0.7f, self.random_float(0.85f, 1.1f));
+  self.play_at(self.assets.sfx_splat, position, 0.7f, self.random_float(0.85f, 1.1f), 40.0f);
 
-  if (!by_player) {
+  if (killer == PlayerID::Invalid) {
     return;
   }
+  // the killer's combo and points are game state (the scoreboard shows them), the screen punch is only for them
+  auto& k = self.pl(killer);
+  k.combo = k.combo_timer > 0.0f ? k.combo + 1 : 1;
+  k.combo_timer = COMBO_WINDOW;
+  const auto points = 100 * k.combo * (big ? 2 : 1);
+  k.score += points;
+  if (self.is_local(killer)) {
+    self.local_kill_juice(points, big);
+  } else {
+    self.record({.kind = net::EventKind::KillJuice, .target = static_cast<u8>(killer), .asset = static_cast<u16>(points), .f = {big ? 1.0f : 0.0f}});
+  }
+}
+
+auto World::local_kill_juice(this World& self, i32 points, bool big) -> void {
+  // (the killer is always the local player here; the host sends a KillJuice event to a remote killer instead)
   auto& j = self.juice;
-  j.hitstop = glm::max(j.hitstop, big ? 0.11f : 0.07f);
+  if (self.role == NetRole::Offline) {
+    j.hitstop = glm::max(j.hitstop, big ? 0.11f : 0.07f);
+  }
   j.shake = glm::min(1.0f, j.shake + (big ? 0.55f : 0.4f));
   j.flash = 1.0f;
-  j.combo = j.combo_timer > 0.0f ? j.combo + 1 : 1;
-  j.combo_timer = COMBO_WINDOW;
   j.combo_pop = 1.0f;
-  const auto points = 100 * j.combo * (big ? 2 : 1);
-  j.score += points;
   self.hud.score_popup = fmt::format("+{}", points);
 }
 
@@ -356,18 +395,21 @@ auto World::update_fx(this World& self, f32 real_dt) -> void {
   j.shake = glm::max(0.0f, j.shake - real_dt * 1.8f);
   j.flash = glm::max(0.0f, j.flash - real_dt * 4.0f);
   j.combo_pop = glm::max(0.0f, j.combo_pop - real_dt * 5.0f);
-  if (j.combo_timer > 0.0f) {
-    j.combo_timer -= real_dt;
-    if (j.combo_timer <= 0.0f) {
-      j.combo = 0;
-      self.hud.score_popup = "";
-    }
+
+  for (auto& line : self.kill_feed) {
+    line.age += real_dt;
   }
+  std::erase_if(self.kill_feed, [](const KillFeedLine& line) { return line.age > 6.0f; });
 
   auto& h = self.hud;
+  const auto* me = self.local_player();
+  const auto combo = me ? me->combo : 0;
+  if (combo == 0) {
+    h.score_popup = "";
+  }
   h.kill_flash = j.flash * 0.35f;
-  h.score = j.score;
-  h.combo = j.combo >= 2 ? fmt::format("{}X COMBO", j.combo) : "";
+  h.score = me ? me->score : 0;
+  h.combo = combo >= 2 ? fmt::format("{}X COMBO", combo) : "";
   h.combo_scale = 1.0f + j.combo_pop * 0.6f;
   h.combo_tilt = -6.0f + std::sin(self.time * 7.0f) * 3.0f;
 }

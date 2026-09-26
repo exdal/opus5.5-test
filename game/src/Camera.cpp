@@ -13,14 +13,15 @@ auto World::update_camera(this World& self, f32 dt) -> void {
   auto target = glm::vec3(0.0f);
   auto height = 24.0f;
 
-  if (self.state == GameState::MainMenu) {
+  const auto* me = self.local_player();
+  if (self.state == GameState::MainMenu || !me || !me->active) {
     const auto t = self.time * 0.05f;
     target = glm::vec3(std::cos(t) * 40.0f, 0.0f, std::sin(t * 1.3f) * 40.0f);
     height = 70.0f;
   } else {
-    target = to3(self.player_position());
-    if (self.player.car != CarID::Invalid) {
-      const auto velocity = self.car_velocity(self.player.car);
+    target = to3(self.player_position(self.local));
+    if (me->car != CarID::Invalid) {
+      const auto velocity = self.car_velocity(me->car);
       const auto speed = glm::length(velocity);
       height = 27.0f + glm::min(speed, 30.0f) * 0.75f;
       // look ahead of the car so you see what you are about to hit

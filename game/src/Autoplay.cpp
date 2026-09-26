@@ -43,15 +43,17 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
   self.total_time += dt;
   auto at = [&](f32 t) { return before < t && self.step_time >= t; };
 
-  self.max_stars = glm::max(self.max_stars, world.stars());
+  auto& player = world.pl(world.local);
+  const auto local = world.local;
+  self.max_stars = glm::max(self.max_stars, world.stars(local));
   for (const auto& c : world.cars) {
-    if (c.alive && c.role == CarRole::Police && c.driver != PedID::Invalid && world.stars() > 0) {
+    if (c.alive && c.role == CarRole::Police && c.driver != PedID::Invalid && world.stars(local) > 0) {
       self.cops_showed_up = true;
     }
   }
 
-  const auto me = world.player.position;
-  const auto in_car = world.player.car != CarID::Invalid;
+  const auto me = player.position;
+  const auto in_car = player.car != CarID::Invalid;
 
   switch (self.step) {
     case 0: { // title screen
@@ -63,13 +65,13 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
       }
       if (world.state == GameState::Playing) {
         self.entered_game = true;
-        self.cash_at_start = world.player.cash;
+        self.cash_at_start = player.cash;
         self.next("started a new game from the menu");
         if (self.start_step > self.step) {
           OX_LOG_INFO("OxCity autoplay: skipping ahead to step {}", self.start_step);
           self.step = self.start_step;
           if (self.step >= 7 && self.step < 20) {
-            world.wanted.heat = 3.5f; // the chase needs someone to be chasing
+            player.wanted.heat = 3.5f; // the chase needs someone to be chasing
           }
         }
       }
@@ -91,7 +93,7 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
         if (self.target_car != CarID::Invalid && best > 25.0f) {
           // no time for a hike, the test is about the car, not the walk
           const auto p = world.car_position(self.target_car);
-          world.teleport_player(p - right_of(forward_of(world.car_heading(self.target_car))) * 5.0f);
+          world.teleport_player(local, p - right_of(forward_of(world.car_heading(self.target_car))) * 5.0f);
         }
       }
       if (at(1.0f)) {
@@ -106,8 +108,8 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
       }
       if (in_car) {
         self.stole_car = true;
-        self.last_car_position = world.car_position(world.player.car);
-        self.next(fmt::format("got into a {}", world.car(world.player.car).display_name));
+        self.last_car_position = world.car_position(player.car);
+        self.next(fmt::format("got into a {}", world.car(player.car).display_name));
       } else if (self.step_time > 25.0f) {
         self.next("gave up on the parked car");
       }
@@ -118,7 +120,7 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
         self.next("fell out of the car?");
         break;
       }
-      const auto id = world.player.car;
+      const auto id = player.car;
       const auto pos = world.car_position(id);
       self.distance_driven += glm::distance(pos, self.last_car_position);
       self.last_car_position = pos;
@@ -176,9 +178,9 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
             }
           }
           input.move = walk_towards(me, where);
-          if (world.player.cash > self.cash_at_start || world.pickups.empty() || self.step_time > 30.0f) {
-            self.cash_after_mug = world.player.cash;
-            self.next(fmt::format("mugged someone, cash ${} -> ${}", self.cash_at_start, world.player.cash));
+          if (player.cash > self.cash_at_start || world.pickups.empty() || self.step_time > 30.0f) {
+            self.cash_after_mug = player.cash;
+            self.next(fmt::format("mugged someone, cash ${} -> ${}", self.cash_at_start, player.cash));
           }
           break;
         }
@@ -195,7 +197,7 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
           }
         }
         if (self.victim != PedID::Invalid && best > 30.0f) {
-          world.teleport_player(world.ped(self.victim).position + glm::vec2(2.0f, 0.0f));
+          world.teleport_player(local, world.ped(self.victim).position + glm::vec2(2.0f, 0.0f));
         }
       }
       if (self.victim != PedID::Invalid) {
@@ -216,7 +218,7 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
       break;
     }
     case 5: { // pistol whip the neighbourhood
-      if (world.player.weapon != Weapon::Pistol) {
+      if (player.weapon != Weapon::Pistol) {
         input.switch_weapon = self.tap();
       }
       auto best = std::numeric_limits<f32>::max();
@@ -237,23 +239,23 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
         self.screenshot("shooting");
       }
       if (self.step_time > 4.0f) {
-        self.next(fmt::format("fired the pistol, {} ammo left, {} stars", world.player.ammo, world.stars()));
+        self.next(fmt::format("fired the pistol, {} ammo left, {} stars", player.ammo, world.stars(local)));
       }
       break;
     }
     case 6: { // rob the bank
       if (self.step_time < dt * 1.5f) {
-        world.teleport_player(world.heist.position + glm::vec2(0.0f, 1.0f));
+        world.teleport_player(local, world.heist.position + glm::vec2(0.0f, 1.0f));
       }
       input.move = walk_towards(me, world.heist.position) * (glm::distance(me, world.heist.position) > 0.6f ? 0.5f : 0.0f);
       input.interact = true;
       if (at(4.0f)) {
         self.screenshot("bank_heist");
       }
-      if (world.stats.banks_robbed > 0) {
+      if (player.stats.banks_robbed > 0) {
         self.robbed_bank = true;
         self.screenshot("heist_done");
-        self.next(fmt::format("robbed the bank, cash now ${}", world.player.cash));
+        self.next(fmt::format("robbed the bank, cash now ${}", player.cash));
       } else if (self.step_time > 30.0f) {
         self.next("the vault didn't open");
       }
@@ -273,12 +275,12 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
           }
         }
         if (best > 30.0f && self.step_time < dt * 1.5f) {
-          world.teleport_player(target + glm::vec2(3.0f, 0.0f));
+          world.teleport_player(local, target + glm::vec2(3.0f, 0.0f));
         }
         input.move = walk_towards(me, target);
         input.enter_exit = best < 3.6f && self.tap();
       } else {
-        const auto id = world.player.car;
+        const auto id = player.car;
         const auto pos = world.car_position(id);
         const auto away = pos - world.heist.position;
         const auto node = world.nearest_node(pos + glm::normalize(away + glm::vec2(0.01f)) * 30.0f);
@@ -291,7 +293,7 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
         self.screenshot("police_chase");
       }
       if (self.step_time > 16.0f) {
-        self.next(fmt::format("ran from the cops with {} stars", world.stars()));
+        self.next(fmt::format("ran from the cops with {} stars", world.stars(local)));
       }
       break;
     }
@@ -299,10 +301,10 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
       if (in_car) {
         input.enter_exit = self.tap();
       }
-      if (world.state == GameState::Arrested || world.state == GameState::Dead) {
-        if (world.state_timer > 1.0f) {
-          self.screenshot(world.state == GameState::Arrested ? "arrested" : "flatlined");
-          self.next(world.state == GameState::Arrested ? "got arrested" : "flatlined");
+      if (player.life != Life::Alive) {
+        if (player.life_timer > 1.0f) {
+          self.screenshot(player.life == Life::Arrested ? "arrested" : "flatlined");
+          self.next(player.life == Life::Arrested ? "got arrested" : "flatlined");
         }
       } else if (self.step_time > 40.0f) {
         self.next("the cops never caught up");
@@ -310,7 +312,7 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
       break;
     }
     case 9: { // back on the street
-      if (world.state == GameState::Playing && self.step_time > 6.0f) {
+      if (player.life == Life::Alive && self.step_time > 6.0f) {
         self.screenshot("respawned");
         self.next("respawned");
       } else if (self.step_time > 15.0f) {
@@ -342,7 +344,7 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
       // bring a civilian to the player and slash it; the aim goes where the victim stands
       auto victim_at = [&](f32 t, glm::vec2 offset) {
         if (at(t)) {
-          world.player.weapon = Weapon::Knife;
+          player.weapon = Weapon::Knife;
           for (auto& ped : world.peds) {
             if (ped.alive && ped.kind == PedKind::Civilian && ped.state != PedState::Driving) {
               ped.position = me + offset;
@@ -371,7 +373,7 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
         self.screenshot("knife_combo");
       }
       if (at(2.4f)) {
-        world.player.weapon = Weapon::Pistol;
+        player.weapon = Weapon::Pistol;
       }
       if (self.step_time > 2.5f && self.step_time < 2.56f) {
         input.has_aim = true;
@@ -388,7 +390,7 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
       if (at(3.0f)) {
         for (usize i = 0; i < world.cars.size(); i++) {
           const auto id = static_cast<CarID>(i);
-          if (world.cars[i].alive && !world.cars[i].player_inside && world.cars[i].driver == PedID::Invalid) {
+          if (world.cars[i].alive && world.cars[i].player_driver == PlayerID::Invalid && world.cars[i].driver == PedID::Invalid) {
             world.teleport_car(id, me + glm::vec2(7.0f, 3.0f), 0.3f);
             self.target_car = id;
             break;
@@ -396,14 +398,14 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
         }
       }
       if (at(3.4f) && self.target_car != CarID::Invalid) {
-        world.damage_car(self.target_car, 500.0f, true);
+        world.damage_car(self.target_car, 500.0f, local);
       }
       if (at(3.5f)) {
         self.screenshot("explosion");
       }
       if (at(6.0f)) {
         self.screenshot("aftermath");
-        self.next(fmt::format("kills {}, combo score {}", world.stats.peds_killed, world.juice.score));
+        self.next(fmt::format("kills {}, combo score {}", player.stats.peds_killed, player.score));
       }
       break;
     }
@@ -426,6 +428,23 @@ auto Autoplay::update(this Autoplay& self, World& world, f32 dt) -> GameInput {
         world.hud.settings_open = false;
         world.set_state(GameState::Playing);
         self.next(saved_off ? "settings: sound effects off, saved and read back" : "settings: the saved value didn't come back");
+      }
+      break;
+    }
+    case 23: { // the multiplayer panel: name and address fields, host and join
+      if (at(0.5f)) {
+        world.set_state(GameState::MainMenu);
+        world.hud.join_open = true;
+        world.hud.player_name = "ALICE";
+        world.hud.join_address = "192.168.1.20:7777";
+      }
+      if (at(1.2f)) {
+        self.screenshot("multiplayer_menu");
+      }
+      if (at(1.5f)) {
+        world.hud.join_open = false;
+        world.set_state(GameState::Playing);
+        self.next("opened the multiplayer panel");
       }
       break;
     }
@@ -463,16 +482,17 @@ auto Autoplay::report(this const Autoplay& self, const World& world) -> bool {
     OX_LOG_INFO("  [{}] {}", c.ok ? "PASS" : "FAIL", c.name);
     all = all && c.ok;
   }
+  const auto& player = world.pl(world.local);
   OX_LOG_INFO(
     "  stats: cash ${} earned ${} | banks {} | cars stolen {} | robbed {} | killed {} | arrested {} | flatlined {} | max stars {}",
-    world.player.cash,
-    world.stats.cash_earned,
-    world.stats.banks_robbed,
-    world.stats.cars_stolen,
-    world.stats.peds_robbed,
-    world.stats.peds_killed,
-    world.stats.times_arrested,
-    world.stats.times_killed,
+    player.cash,
+    player.stats.cash_earned,
+    player.stats.banks_robbed,
+    player.stats.cars_stolen,
+    player.stats.peds_robbed,
+    player.stats.peds_killed,
+    player.stats.times_arrested,
+    player.stats.times_killed,
     self.max_stars
   );
   return all;

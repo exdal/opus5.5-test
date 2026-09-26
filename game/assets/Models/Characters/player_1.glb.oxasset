@@ -1,0 +1,183 @@
+{
+  "uuid": "76f8ba33-f1f2-4806-b103-1ce4566b5eef",
+  "type": 2,
+  "source_hash": "38AA3F818F3A8B5E",
+  "textures": [],
+  "materials": [
+    {
+      "uuid": "4ef3287e-c4ee-498b-97cf-2dc0a0ac90cb",
+      "sampling_mode": 0,
+      "albedo_color": {
+        "x": 0.0137021,
+        "y": 0.57758,
+        "z": 0.745404,
+        "w": 1
+      },
+      "uv_size": {
+        "x": 1,
+        "y": 1
+      },
+      "uv_offset": {
+        "x": 0,
+        "y": 0
+      },
+      "emissive_color": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "roughness_factor": 0.8,
+      "metallic_factor": 0,
+      "normal_scale": 1,
+      "occlusion_strength": 1,
+      "alpha_mode": 0,
+      "alpha_cutoff": 0.5,
+      "flip_normal_y": false,
+      "albedo_texture": "00000000-0000-0000-0000-000000000000",
+      "normal_texture": "00000000-0000-0000-0000-000000000000",
+      "emissive_texture": "00000000-0000-0000-0000-000000000000",
+      "metallic_roughness_texture": "00000000-0000-0000-0000-000000000000",
+      "occlusion_texture": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "uuid": "a2858e3b-edc4-4628-899a-e1e6c19d1a22",
+      "sampling_mode": 0,
+      "albedo_color": {
+        "x": 0.391572,
+        "y": 0.162029,
+        "z": 0.0497066,
+        "w": 1
+      },
+      "uv_size": {
+        "x": 1,
+        "y": 1
+      },
+      "uv_offset": {
+        "x": 0,
+        "y": 0
+      },
+      "emissive_color": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "roughness_factor": 0.8,
+      "metallic_factor": 0,
+      "normal_scale": 1,
+      "occlusion_strength": 1,
+      "alpha_mode": 0,
+      "alpha_cutoff": 0.5,
+      "flip_normal_y": false,
+      "albedo_texture": "00000000-0000-0000-0000-000000000000",
+      "normal_texture": "00000000-0000-0000-0000-000000000000",
+      "emissive_texture": "00000000-0000-0000-0000-000000000000",
+      "metallic_roughness_texture": "00000000-0000-0000-0000-000000000000",
+      "occlusion_texture": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "uuid": "cdc4d44e-abfa-4cff-a961-0bed7775a592",
+      "sampling_mode": 0,
+      "albedo_color": {
+        "x": 0.57758,
+        "y": 0.371238,
+        "z": 0.102242,
+        "w": 1
+      },
+      "uv_size": {
+        "x": 1,
+        "y": 1
+      },
+      "uv_offset": {
+        "x": 0,
+        "y": 0
+      },
+      "emissive_color": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "roughness_factor": 0.8,
+      "metallic_factor": 0,
+      "normal_scale": 1,
+      "occlusion_strength": 1,
+      "alpha_mode": 0,
+      "alpha_cutoff": 0.5,
+      "flip_normal_y": false,
+      "albedo_texture": "00000000-0000-0000-0000-000000000000",
+      "normal_texture": "00000000-0000-0000-0000-000000000000",
+      "emissive_texture": "00000000-0000-0000-0000-000000000000",
+      "metallic_roughness_texture": "00000000-0000-0000-0000-000000000000",
+      "occlusion_texture": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "uuid": "6e81c8df-c9a2-4e8f-ad76-d70fb5bed71a",
+      "sampling_mode": 0,
+      "albedo_color": {
+        "x": 0.00749903,
+        "y": 0.00749903,
+        "z": 0.00749903,
+        "w": 1
+      },
+      "uv_size": {
+        "x": 1,
+        "y": 1
+      },
+      "uv_offset": {
+        "x": 0,
+        "y": 0
+      },
+      "emissive_color": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "roughness_factor": 0.8,
+      "metallic_factor": 0,
+      "normal_scale": 1,
+      "occlusion_strength": 1,
+      "alpha_mode": 0,
+      "alpha_cutoff": 0.5,
+      "flip_normal_y": false,
+      "albedo_texture": "00000000-0000-0000-0000-000000000000",
+      "normal_texture": "00000000-0000-0000-0000-000000000000",
+      "emissive_texture": "00000000-0000-0000-0000-000000000000",
+      "metallic_roughness_texture": "00000000-0000-0000-0000-000000000000",
+      "occlusion_texture": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "uuid": "dc0b8267-a554-43f3-966f-9b9439377b67",
+      "sampling_mode": 0,
+      "albedo_color": {
+        "x": 0.012983,
+        "y": 0.012983,
+        "z": 0.012983,
+        "w": 1
+      },
+      "uv_size": {
+        "x": 1,
+        "y": 1
+      },
+      "uv_offset": {
+        "x": 0,
+        "y": 0
+      },
+      "emissive_color": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "roughness_factor": 0.8,
+      "metallic_factor": 0,
+      "normal_scale": 1,
+      "occlusion_strength": 1,
+      "alpha_mode": 0,
+      "alpha_cutoff": 0.5,
+      "flip_normal_y": false,
+      "albedo_texture": "00000000-0000-0000-0000-000000000000",
+      "normal_texture": "00000000-0000-0000-0000-000000000000",
+      "emissive_texture": "00000000-0000-0000-0000-000000000000",
+      "metallic_roughness_texture": "00000000-0000-0000-0000-000000000000",
+      "occlusion_texture": "00000000-0000-0000-0000-000000000000"
+    }
+  ]
+}

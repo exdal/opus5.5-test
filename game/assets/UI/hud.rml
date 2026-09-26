@@ -37,6 +37,25 @@
 		<div id="heist-bar"><div id="heist-fill" data-style-width="heist_progress + '%'"></div></div>
 	</div>
 
+	<!-- multiplayer: who's who above their heads, the scores, and who wasted whom -->
+	<div id="tags" data-if="!menu_visible">
+		<div class="name-tag" data-for="tag : tags"
+			data-style-left="tag.x + 'px'" data-style-top="tag.y + 'px'" data-class-wanted="tag.stars > 0">{{ tag.name }}</div>
+	</div>
+
+	<div id="scoreboard" data-if="online &amp;&amp; !menu_visible">
+		<div class="score-row" data-for="row : scoreboard" data-class-me="row.me">
+			<span class="score-name">{{ row.name }}</span>
+			<span class="score-stars" data-if="row.stars > 0">{{ row.stars }}*</span>
+			<span class="score-points">{{ row.score }}</span>
+			<span class="score-kills">{{ row.kills }} K</span>
+		</div>
+	</div>
+
+	<div id="kill-feed" data-if="!menu_visible">
+		<div class="feed-line" data-for="line : kill_feed">{{ line }}</div>
+	</div>
+
 	<div id="big-text" data-if="big_text != ''">{{ big_text }}</div>
 	<div id="big-sub" data-if="big_text != ''">{{ stats }}</div>
 </body>

@@ -47,4 +47,5 @@ while [ $# -gt 0 ]; do
     shift
   fi
 done
-exec ./OxCity --width 960 --height 540 "${validation[@]}" "${args[@]}"
+# OXCITY_WIDTH/OXCITY_HEIGHT: lavapipe's cost goes with the pixel count, the multiplayer test runs several at once
+exec ./OxCity --width "${OXCITY_WIDTH:-960}" --height "${OXCITY_HEIGHT:-540}" "${validation[@]}" "${args[@]}"

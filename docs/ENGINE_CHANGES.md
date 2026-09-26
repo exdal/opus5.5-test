@@ -240,6 +240,37 @@ as the proper upstream fix, when that differs from what I did.
   keep real time.
 - **Upstream suggestion:** take it. It also makes particles deterministic for replays and tests.
 
+### 15. An app without the Renderer module can run
+- **File:** `Oxylus/src/Core/App.cpp` (`App::step`)
+- **Symptom:** OxCity's dedicated server registers `LuaManager, AssetManager, Physics, NetworkManager`
+  and no window. `App::step` reads the frame limit from `render_context->context_cvar` whenever no
+  limit was set with `with_frame_limit`, and there is no render context without the `Renderer` module:
+  null dereference on the first frame.
+- **Change:** the lookup falls back to "no limit" when there's no render context.
+- **Upstream suggestion:** take it. Everything else about a windowless app already works (App skips
+  the window and render context, `Scene` checks `has_mod<Renderer>()` and `has_mod<RmlUI>()`); this
+  was the one place that didn't ask. The server still calls `with_frame_limit(60)` so it doesn't spin
+  a core flat out.
+
+### 16. `SceneSnapshotBuilder::find_last_acked` walks back through the history
+- **File:** `Oxylus/src/Scene/SceneSnapshot.cpp`
+- **Symptom (found reading it, OxCity doesn't use it):** the loop over past sequences never used its
+  counter, so it checked `current - 1` 31 times. A delta could only ever be taken against the
+  immediately previous snapshot, and if that one wasn't acked, against nothing (a full snapshot).
+- **Change:** `(current_sequence + MAX_SEQUENCES - i) % MAX_SEQUENCES`.
+- **Upstream suggestion:** take it, with a unit test next to `TestNetPacket.cpp` (I didn't add one:
+  the tests need `xmake f --tests=y` and gtest, and reconfiguring the vendored build wasn't worth it
+  for one line).
+
+### 17. `NetClient::connect` hands ENet a NUL-terminated host name
+- **File:** `Oxylus/src/Networking/NetClient.cpp`
+- **Symptom (found reading it):** `enet_address_set_host(&address, host_name.data())` with a
+  `std::string_view`. That's only correct when the view happens to point into a NUL-terminated string.
+  A view into the middle of a buffer (say, the host part of "host:port") reads past its end. The
+  result of the lookup was also ignored, so an unresolvable host name connected to `::`.
+- **Change:** copy into a `std::string`, check the return value, and fail `connect` with a log line.
+- **Upstream suggestion:** take it.
+
 ## Validation status
 
 Run on lavapipe with Khronos validation 1.3.275 (`tools/run_headless.sh --validation`), 200 frames

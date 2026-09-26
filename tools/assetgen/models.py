@@ -531,6 +531,10 @@ def material_json(m: Mat, images: list[str]) -> dict:
 CHARACTER_STYLES = {
     # name: (shirt, pants, skin, hair)
     "player": (mat("jacket_yellow", "#e6b62a"), JEANS, SKIN_A, HAIR_DARK),
+    # multiplayer: every player slot gets its own loud jacket so you can tell who's who from above
+    "player_1": (mat("jacket_cyan", "#1fc8e0"), BLACK, SKIN_B, HAIR_BLOND),
+    "player_2": (mat("jacket_magenta", "#e02a9a"), JEANS, SKIN_C, HAIR_DARK),
+    "player_3": (mat("jacket_lime", "#7fe02a"), mat("pants_grey", "#55585e"), SKIN_A, BLACK),
     "ped_0": (mat("shirt_red", "#b0302a"), JEANS, SKIN_A, HAIR_BLOND),
     "ped_1": (mat("shirt_green", "#3d7a4a"), mat("pants_khaki", "#a08a5c"), SKIN_B, HAIR_DARK),
     "ped_2": (mat("shirt_purple", "#6b3f8f"), BLACK, SKIN_C, HAIR_DARK),

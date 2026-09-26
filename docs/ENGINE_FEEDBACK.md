@@ -35,6 +35,11 @@ miniaudio and asset cooking. It ran headless on llvmpipe with 4 CPU cores.
 | B20 | Medium | **A particle system that can't be read silently becomes the default one**, which loops at 32/s forever. `load_particle_system` falls back to `ParticleSystem::make_default()` when the file is missing, logs one error, and the game gets white dots that never stop. Fine for the editor's "new asset", wrong for a shipped asset. | `AssetManager::load_particle_system` | worked around (the game checks spawn_rate). Suggest failing the load |
 | B21 | Medium | **The cooker registers `.oxparticle` (and audio) in the manifest by source path but doesn't pack or install them**, so a game has to know to copy them next to the binary with `ox.install_resources`. Nothing warns when a registered file is missing at runtime until something loads it. | `ox.cook_assets` rule | worked around (install rule). Suggest the cooker packs them, or installs what it registers |
 | B22 | Medium | **Particles simulate on wall-clock time**, not the scene's step: they keep running while the game is paused or in slow motion, and short effects vanish entirely when a frame is slow. | `RendererInstance::update` | **fixed locally** (patch 14) |
+| B23 | High | **No networking at all on a machine without IPv6.** The ENet fork (`enet-ox`) only ever opens `PF_INET6` sockets and relies on dual stack for IPv4 peers. With IPv6 disabled in the kernel (Docker's default network, `ipv6.disable=1`, this container), `socket()` fails with `EAFNOSUPPORT`, and all the engine logs is `Failed to create new NetServer for port 7777!` without an errno. Clients fail the same way. | `enet.h` `enet_socket_create`, `NetworkManager::create_*_handle` | worked around **for testing only** (an `LD_PRELOAD` IPv4 fallback shim, `tools/netshim/`). Suggest an `AF_INET` fallback in `enet_socket_create` (the address type is already IPv4-mapped IPv6) and logging `errno` |
+| B24 | Medium | **A module whose `init()` fails still gets `update()` every frame** (seen with OxCity's server module when its port was taken: "failed to initialize!", then its 10-second status report kept printing). Together with B1, a failing module is both skipped for its dependents and run anyway. | `ModuleRegistry` | noted (the game's `update` is safe on a half-built state) |
+| B25 | Medium | **No graceful way to close a server.** `NetworkManager::destroy_server` destroys the ENet host without disconnecting its peers, so every client sits in ENet's timeout (up to 30 s) before it notices the host is gone. | `NetworkManager::destroy_server` | worked around (the game sends a goodbye RPC, disconnects each peer, and calls `enet_host_flush` itself before destroying) |
+| B26 | Low | `NetClient::net_id` starts at 0, and the server hands out 0 to its first client, so a client can't tell from `net_id` whether the handshake finished. `NetClient` also has no `on_disconnect` virtual (`NetServer` has `on_client_disconnect`), so it's the event bus or polling `status`. | `NetClient` | worked around (poll `status`; the game has its own join/welcome RPC anyway) |
+| B27 | Low | `NetServer::broadcast` / `broadcast_call` go to every connected ENet peer, including ones that haven't finished the handshake or that the game refused. | `NetServer::broadcast` | worked around (per-client `call_client` for snapshots) |
 | B11 | Cosmetic | First run logs `ERR File error: Unknown, Path: context_config.toml`. A missing config on first launch is normal, it shouldn't be an error. | `ContextCVar::load` | noted |
 
 ## Missing features / API friction (ranked)
@@ -93,7 +98,25 @@ miniaudio and asset cooking. It ran headless on llvmpipe with 4 CPU cores.
 12. **Particles are depth tested against the scene**, which is right, but it means a burst emitted at
     an object's centre (an explosion inside a car) is invisible until it leaves the mesh. Worth a line
     in the docs, or an option to test against the depth *before* the emitter's own entity.
-13. **`Scene` exposes Jolt in its public header** (`Scene.hpp` includes six Jolt headers). AGENTS.md
+13. **Networking: the pieces are there, the glue is yours.** `NetworkManager::update` is empty, so a
+    `NetServer`/`NetClient` does nothing until you call `tick(timestep)` yourself every frame (the
+    header doesn't say so). Once you know, it's a nice design: `tick` also returns true on the send
+    rate you set with `set_tick_rate`, which is exactly the snapshot clock a game wants.
+14. **`SceneSnapshotBuilder` can't carry a game like this one.** It memcpys every component of every
+    `Networked` entity, keyed by the local flecs entity id. Components holding pointers or
+    `std::string`s (`RigidBodyComponent::runtime_body`, names) can't cross a process boundary that way,
+    entity ids differ between host and client, and nothing maps one to the other. OxCity's state lives in
+    game structs anyway (a ped is a position, a heading and a state machine, not a set of components),
+    so it sends its own quantized snapshot, about 1.2 KB for the whole city. A snapshot builder that
+    takes user serializers per component, plus a network id component, would make the built-in path
+    usable.
+15. **`RPCParameter` has a byte array alternative, and that one turns out to be the whole API.**
+    `std::vector<u8>` + zpp::bits (which the engine already ships) carries any struct. The typed
+    accessors are uneven though: `as_f32`, `as_int64`, `as_str`, `as_uuid`, `as_span<T>`, but no `as_u8`,
+    `as_u16`, `as_i32` or `as_f64` for the alternatives that exist.
+16. **No `App::has_window()`.** `App::get_window()` asserts. Code shared between a windowed game and a
+    headless server has to carry its own flag.
+17. **`Scene` exposes Jolt in its public header** (`Scene.hpp` includes six Jolt headers). AGENTS.md
     already calls this debt, and I agree: every game TU pays for it.
 
 ## Things that were genuinely good
@@ -113,6 +136,13 @@ miniaudio and asset cooking. It ran headless on llvmpipe with 4 CPU cores.
   and slip queries show the direction is right.
 - **The module system** (`App::with<T>(args...)`, `module_dependencies`, `update(Timestep)`) is small
   and pleasant. The whole game is one module.
+- **A windowless app is nearly free.** Leave out `with_window` and the `Renderer`/`RmlUI`/`AudioEngine`
+  modules, and `App`, `AssetManager`, `Physics` and `Scene` all just work: the dedicated server builds
+  the city with Jolt and 50 AI pedestrians in 14 ms. One null check was missing (patch 15).
+- **The RPC layer** (`register_proc`, `call_server`, `call_client`, `broadcast_call`, reliable or
+  unreliable per call) is the right size for a game: OxCity's whole protocol is seven procedures. The
+  engine's own handshake runs first on the reliable channel, so a game RPC sent right after
+  `Connected` arrives after it, in order.
 
 ## Debugging notes
 

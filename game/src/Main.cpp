@@ -1,10 +1,15 @@
 #include <cstdlib>
 #include <string>
 
+#include "Asset/AssetManager.hpp"
 #include "Core/App.hpp"
 #include "Core/DefaultModules.hpp"
 #include "Game.hpp"
+#include "Networking/NetworkManager.hpp"
 #include "ParticleAssets.hpp"
+#include "Physics/Physics.hpp"
+#include "Scripting/LuaManager.hpp"
+#include "Server.hpp"
 
 // OxCity
 //   --autoplay            drive the player with the scripted test run in Autoplay.cpp
@@ -15,6 +20,11 @@
 //   --seed N              city / traffic seed
 //   --width W --height H  window size
 //   --write-particles DIR build the particle graphs and write them as .oxparticle files, then exit
+//   --host [PORT]         start a listen server (default port 7777) and play
+//   --join ADDR[:PORT]    join a game
+//   --name NAME           your name in multiplayer
+//   --server [PORT]       dedicated server: no window, no renderer, just the city and the network
+//   --net-autoplay ROLE   scripted multiplayer test player: host, shooter or target (tools/run_net_test.sh)
 auto main(int argc, char** argv) -> int {
   // authoring mode: no window, no engine modules, just the particle graph API
   for (int i = 1; i + 1 < argc; i++) {
@@ -49,9 +59,32 @@ auto main(int argc, char** argv) -> int {
     options.autoplay = true;
     options.autoplay_from = std::atoi(from.c_str());
   }
+  if (args.contains("--host")) {
+    const auto port = value_of("--host");
+    options.host_port = !port.empty() && port[0] != '-' ? static_cast<u16>(std::atoi(port.c_str())) : 7777;
+  }
+  options.join_address = value_of("--join");
+  options.player_name = value_of("--name");
+  options.net_autoplay = value_of("--net-autoplay");
   if (auto seed = value_of("--seed"); !seed.empty()) {
     options.seed = static_cast<u32>(std::atoi(seed.c_str()));
   }
+  if (args.contains("--server")) {
+    const auto port = value_of("--server");
+    options.host_port = !port.empty() && port[0] != '-' ? static_cast<u16>(std::atoi(port.c_str())) : 7777;
+    // no window and no Renderer: App then has no render context to read its frame limit from, so give it one
+    // (it also keeps the server from spinning a core flat out)
+    app.with_name("OxCity Server")
+      .with_frame_limit(60)
+      .with<ox::LuaManager>()
+      .with<ox::AssetManager>()
+      .with<ox::Physics>()
+      .with<ox::NetworkManager>()
+      .with<oxcity::Server>(options)
+      .run();
+    return 0;
+  }
+
   auto width = 1280u;
   auto height = 720u;
   if (auto w = value_of("--width"); !w.empty()) {

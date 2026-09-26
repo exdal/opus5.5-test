@@ -36,10 +36,29 @@ static auto find_spec(std::string_view name) -> const VehicleSpec& {
   return VEHICLE_SPECS[0];
 }
 
+auto car_model_index(std::string_view name) -> u8 {
+  for (usize i = 0; i < std::size(VEHICLE_SPECS); i++) {
+    if (VEHICLE_SPECS[i].name == name) {
+      return static_cast<u8>(i);
+    }
+  }
+  return 0;
+}
+
+auto car_model_name(u8 index) -> std::string_view {
+  return VEHICLE_SPECS[glm::min<usize>(index, std::size(VEHICLE_SPECS) - 1)].name;
+}
+
 auto World::spawn_model(this World& self, const ox::UUID& model, glm::vec3 position, f32 yaw, glm::vec3 scale)
   -> flecs::entity {
   if (!model) {
     return {};
+  }
+  if (self.headless) {
+    // the server simulates positions, nothing needs a mesh: a bare entity with a transform stands in for the model
+    auto e = self.scene->create_entity();
+    e.set<ox::TransformComponent>({.position = position, .rotation = yaw_quat(yaw), .scale = scale});
+    return e;
   }
   auto e = self.scene->create_model_entity(model);
   if (!e) {
@@ -94,19 +113,27 @@ auto World::find_limbs(this World& self, flecs::entity root) -> Limbs {
   limbs.leg_r = find_descendant(root, "leg_r");
   limbs.arm_l = find_descendant(root, "arm_l");
   limbs.arm_r = find_descendant(root, "arm_r");
-  if (!limbs.leg_l || !limbs.arm_l) {
+  if ((!limbs.leg_l || !limbs.arm_l) && !self.headless) {
     OX_LOG_WARN("OxCity: character model '{}' has no limb nodes, it won't animate", root.name().c_str());
   }
   return limbs;
 }
 
-auto World::spawn_ped(this World& self, PedKind kind, glm::vec2 position) -> PedID {
-  auto model = self.assets.peds[static_cast<usize>(self.random_int(0, static_cast<i32>(self.assets.peds.size()) - 1))];
-  if (kind == PedKind::Cop) {
-    model = self.assets.cop;
-  } else if (kind == PedKind::Guard) {
-    model = self.assets.guard;
+auto World::ped_model(this const World& self, u8 model) -> ox::UUID {
+  if (model < self.assets.peds.size()) {
+    return self.assets.peds[model];
   }
+  return model == self.assets.peds.size() ? self.assets.cop : self.assets.guard;
+}
+
+auto World::spawn_ped(this World& self, PedKind kind, glm::vec2 position) -> PedID {
+  auto model_index = static_cast<u8>(self.random_int(0, static_cast<i32>(self.assets.peds.size()) - 1));
+  if (kind == PedKind::Cop) {
+    model_index = static_cast<u8>(self.assets.peds.size());
+  } else if (kind == PedKind::Guard) {
+    model_index = static_cast<u8>(self.assets.peds.size() + 1);
+  }
+  const auto model = self.ped_model(model_index);
 
   // reuse the slot of a ped that has been dead long enough
   auto slot = PedID::Invalid;
@@ -125,6 +152,7 @@ auto World::spawn_ped(this World& self, PedKind kind, glm::vec2 position) -> Ped
   }
 
   auto ped = Ped{};
+  ped.model = model_index;
   ped.entity = e;
   ped.limbs = self.find_limbs(e);
   ped.kind = kind;
@@ -137,6 +165,7 @@ auto World::spawn_ped(this World& self, PedKind kind, glm::vec2 position) -> Ped
   ped.walk_phase = self.random_float(0.0f, 6.0f);
 
   if (slot != PedID::Invalid) {
+    ped.generation = static_cast<u8>(self.ped(slot).generation + 1);
     self.ped(slot) = ped;
     return slot;
   }
@@ -166,6 +195,8 @@ auto World::spawn_car(this World& self, std::string_view model, glm::vec2 positi
 
   auto car = Car{};
   car.entity = root;
+  // clients only draw cars: the host's Jolt vehicle is the real one, here they're posed from snapshots
+  const auto simulated = self.authority();
   car.role = role;
   car.model = std::string(spec.name);
   car.display_name = std::string(spec.display);
@@ -181,7 +212,7 @@ auto World::spawn_car(this World& self, std::string_view model, glm::vec2 positi
     {-half_w, 0.36f, -axle},
   };
   for (usize i = 0; i < 4; i++) {
-    auto wheel = self.scene->create_model_entity(self.assets.wheel);
+    auto wheel = self.headless ? self.scene->create_entity() : self.scene->create_model_entity(self.assets.wheel);
     if (!wheel) {
       continue;
     }
@@ -193,6 +224,10 @@ auto World::spawn_car(this World& self, std::string_view model, glm::vec2 positi
     wheel.child_of(root);
     wheel.set_name(WHEEL_NAMES[i]);
     wheel.set<ox::TransformComponent>({.position = wheel_positions[i]});
+    car.wheels[i] = wheel;
+    if (!simulated) {
+      continue;
+    }
     const auto front = i < 2;
     wheel.set<ox::VehicleWheelComponent>({
       .attachment = wheel_positions[i] + glm::vec3(0.0f, 0.42f, 0.0f),
@@ -207,10 +242,17 @@ auto World::spawn_car(this World& self, std::string_view model, glm::vec2 positi
       .max_hand_brake_torque = front ? 0.0f : 5000.0f,
       .driven = true,
     });
-    car.wheels[i] = wheel;
   }
 
   const auto top = 0.3f + spec.body_height + (spec.name == "van" ? 0.9f : 0.5f);
+  if (!simulated) {
+    if (spec.name == "police") {
+      car.siren_red = find_descendant(root, "siren_red");
+      car.siren_blue = find_descendant(root, "siren_blue");
+    }
+    self.cars.push_back(std::move(car));
+    return static_cast<CarID>(self.cars.size() - 1);
+  }
   root.set<ox::BoxColliderComponent>({
     .size = {spec.width * 0.5f, (top - 0.3f) * 0.5f, spec.length * 0.5f + 0.05f},
     .offset = {0.0f, 0.3f + (top - 0.3f) * 0.5f, 0.0f},
@@ -243,6 +285,7 @@ auto World::spawn_car(this World& self, std::string_view model, glm::vec2 positi
 
   for (usize i = 0; i < self.cars.size(); i++) {
     if (!self.cars[i].alive) {
+      car.generation = static_cast<u8>(self.cars[i].generation + 1);
       self.cars[i] = std::move(car);
       return static_cast<CarID>(i);
     }
@@ -256,7 +299,8 @@ auto World::despawn_car(this World& self, CarID id) -> void {
   if (!c.alive) {
     return;
   }
-  if (c.driver != PedID::Invalid) {
+  // (a client's cars only pretend to have a driver, the AI lives on the host)
+  if (c.driver != PedID::Invalid && self.authority() && static_cast<usize>(c.driver) < self.peds.size()) {
     auto& driver = self.ped(c.driver);
     if (driver.entity.is_alive()) {
       driver.entity.destruct();
@@ -267,19 +311,28 @@ auto World::despawn_car(this World& self, CarID id) -> void {
     c.driver = PedID::Invalid;
   }
   // OnRemove observers tear the vehicle constraint and the body down, children (wheels, meshes) go with it
-  if (c.entity.is_alive()) {
+  if (c.entity && c.entity.is_alive()) {
     c.entity.destruct();
   }
+  const auto generation = c.generation;
   c = Car{};
   c.alive = false;
+  c.generation = generation;
 }
 
 auto World::spawn_pickup(this World& self, glm::vec2 position, i32 cash, i32 ammo) -> void {
   auto e = self.spawn_model(self.assets.cash, to3(position, 0.2f), self.random_float(0.0f, glm::two_pi<f32>()));
-  self.pickups.push_back(Pickup{.entity = e, .position = position, .cash = cash, .ammo = ammo});
+  self.pickups.push_back(Pickup{.id = self.next_pickup_id++, .entity = e, .position = position, .cash = cash, .ammo = ammo});
+  if (self.next_pickup_id == 0) {
+    self.next_pickup_id = 1;
+  }
 }
 
 auto World::spawn_tracer(this World& self, glm::vec3 from, glm::vec3 to) -> void {
+  self.record({.kind = net::EventKind::Tracer, .f = {from.x, from.y, from.z, to.x, to.y, to.z}});
+  if (self.headless) {
+    return;
+  }
   const auto delta = to - from;
   const auto length = glm::length(delta);
   if (length < 0.1f) {

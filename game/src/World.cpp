@@ -47,6 +47,7 @@ static auto find_asset(std::string_view relative) -> ox::UUID {
 // whole session keeps them resident.
 static auto runtime_models(const AssetTable& a) -> std::vector<ox::UUID> {
   auto models = std::vector<ox::UUID>(a.peds.begin(), a.peds.end());
+  models.insert(models.end(), a.players.begin(), a.players.end());
   models.insert(models.end(), {a.cop, a.guard, a.sedan, a.sports, a.taxi, a.police, a.van, a.wheel, a.cash, a.tracer, a.marker, a.knife, a.fx});
   models.insert(models.end(), a.blood_decals.begin(), a.blood_decals.end());
   models.insert(models.end(), a.scorch_decals.begin(), a.scorch_decals.end());
@@ -54,7 +55,7 @@ static auto runtime_models(const AssetTable& a) -> std::vector<ox::UUID> {
   return models;
 }
 
-World::World(u32 seed) : rng(seed) {}
+World::World(u32 seed_) : rng(seed_), seed(seed_) {}
 
 World::~World() {
   // the sounds were acquired once in init_audio, give the refs back or the asset manager frees them after the
@@ -99,7 +100,10 @@ auto World::init(this World& self) -> bool {
   ZoneScoped;
 
   auto& a = self.assets;
-  a.player = find_asset("Models/Characters/player.glb");
+  a.players[0] = find_asset("Models/Characters/player.glb");
+  for (usize i = 1; i < a.players.size(); i++) {
+    a.players[i] = find_asset(fmt::format("Models/Characters/player_{}.glb", i));
+  }
   for (usize i = 0; i < a.peds.size(); i++) {
     a.peds[i] = find_asset(fmt::format("Models/Characters/ped_{}.glb", i));
   }
@@ -165,12 +169,13 @@ auto World::init(this World& self) -> bool {
   a.sfx_explosion = find_asset("Audio/explosion.wav");
   a.music_menu = find_asset("Audio/menu_theme.wav");
 
-  if (!a.player || !a.sedan || !a.road_straight) {
+  if (!a.players[0] || !a.sedan || !a.road_straight) {
     OX_LOG_ERROR("OxCity: core assets are missing, was the game built with the ox.cook_assets rule?");
     return false;
   }
 
-  {
+  // a dedicated server only needs the uuids (sounds travel as indices into the table); it never draws or plays
+  if (!self.headless) {
     auto& asset_man = ox::App::mod<ox::AssetManager>();
     for (const auto& uuid : runtime_models(a)) {
       if (uuid && !asset_man.load_asset(uuid)) {
@@ -192,21 +197,27 @@ auto World::init(this World& self) -> bool {
   cvar.cvar_bloom_enable.set(true);
   cvar.cvar_fxaa_enable.set(true);
 
-  // sun + sky, same recipe the editor uses for a new scene
-  const auto sun = self.scene->create_entity("sun");
-  sun.set<ox::TransformComponent>({
-    // the light's forward axis points *at* the sun (the editor's default scene uses a positive pitch too),
-    // a negative pitch puts the sun under the horizon and the whole city goes black
-    .rotation = glm::quat(glm::vec3(glm::radians(58.0f), glm::radians(30.0f), 0.0f)),
-  });
-  sun.set<ox::LightComponent>({.type = ox::LightComponent::LightType::Directional, .intensity = 10.0f})
-    .add<ox::AtmosphereComponent>();
-  sun.set<ox::AutoExposureComponent>({});
+  if (self.headless) {
+    // nobody looks through it, but the attract-mode camera position is the fallback listener position
+    self.camera = self.scene->create_entity("camera");
+    self.camera.set<ox::TransformComponent>({});
+  } else {
+    // sun + sky, same recipe the editor uses for a new scene
+    const auto sun = self.scene->create_entity("sun");
+    sun.set<ox::TransformComponent>({
+      // the light's forward axis points *at* the sun (the editor's default scene uses a positive pitch too),
+      // a negative pitch puts the sun under the horizon and the whole city goes black
+      .rotation = glm::quat(glm::vec3(glm::radians(58.0f), glm::radians(30.0f), 0.0f)),
+    });
+    sun.set<ox::LightComponent>({.type = ox::LightComponent::LightType::Directional, .intensity = 10.0f})
+      .add<ox::AtmosphereComponent>();
+    sun.set<ox::AutoExposureComponent>({});
 
-  self.camera = self.scene->create_entity("camera");
-  self.camera.set<ox::CameraComponent>({.fov = 50.0f, .far_clip = 400.0f, .near_clip = 0.5f});
-  self.camera.add<ox::AudioListenerComponent>();
-  self.camera.set<ox::AudioListenerComponent>({.active = true});
+    self.camera = self.scene->create_entity("camera");
+    self.camera.set<ox::CameraComponent>({.fov = 50.0f, .far_clip = 400.0f, .near_clip = 0.5f});
+    self.camera.add<ox::AudioListenerComponent>();
+    self.camera.set<ox::AudioListenerComponent>({.active = true});
+  }
 
   self.build_city();
 
@@ -270,14 +281,20 @@ auto World::init(this World& self) -> bool {
     }
   }
 
-  self.spawn_player(self.hospital);
-
-  if (!self.init_hud()) {
-    return false;
+  // offline you are slot 0, standing outside the hospital until NEW GAME puts you in play
+  if (self.local != PlayerID::Invalid) {
+    self.spawn_player(self.local, self.hospital);
+    self.pl(self.local).name = "YOU";
   }
-  self.load_settings();
-  self.init_audio();
-  self.init_fx();
+
+  if (!self.headless) {
+    if (!self.init_hud()) {
+      return false;
+    }
+    self.load_settings();
+    self.init_audio();
+    self.init_fx();
+  }
 
   self.scene->runtime_start();
   self.set_state(GameState::MainMenu);
@@ -292,12 +309,18 @@ auto World::init(this World& self) -> bool {
 }
 
 auto World::start_game(this World& self) -> void {
-  self.player.cash = 0;
-  self.player.health = 100.0f;
-  self.player.ammo = 60;
-  self.player.weapon = Weapon::Pistol;
-  self.wanted = {};
-  self.stats = {};
+  if (auto* p = self.local_player()) {
+    p->active = true;
+    p->life = Life::Alive;
+    p->cash = 0;
+    p->health = 100.0f;
+    p->ammo = 60;
+    p->weapon = Weapon::Pistol;
+    p->wanted = {};
+    p->stats = {};
+    p->score = 0;
+    p->combo = 0;
+  }
   self.juice = {};
   self.set_state(GameState::Playing);
   self.pager("WELCOME TO OXCITY. THE BANK ON THE NORTH SIDE IS RIPE. STEAL A CAR, GET RICH.");
@@ -308,11 +331,6 @@ auto World::set_state(this World& self, GameState state) -> void {
   self.state_timer = 0.0f;
   self.hud.menu_visible = state == GameState::MainMenu || state == GameState::Paused;
   self.hud.paused = state == GameState::Paused;
-  switch (state) {
-    case GameState::Dead: self.hud.big_text = "FLATLINED"; break;
-    case GameState::Arrested: self.hud.big_text = "ARRESTED"; break;
-    default               : self.hud.big_text = ""; break;
-  }
 }
 
 auto World::update(this World& self, const GameInput& input, f32 real_dt) -> void {
@@ -326,7 +344,9 @@ auto World::update(this World& self, const GameInput& input, f32 real_dt) -> voi
 
   switch (self.state) {
     case GameState::MainMenu: {
-      if (input.confirm || self.start_requested) {
+      // Enter in the multiplayer panel's text fields is typing, not "start a single player game"
+      const auto panel_open = self.hud.join_open || self.hud.settings_open;
+      if ((input.confirm && !panel_open) || self.start_requested) {
         self.start_requested = false;
         self.start_game();
       }
@@ -342,37 +362,41 @@ auto World::update(this World& self, const GameInput& input, f32 real_dt) -> voi
     case GameState::Playing: {
       if (input.pause) {
         self.set_state(GameState::Paused);
-        break;
-      }
-      self.update_player(input, dt);
-      break;
-    }
-    case GameState::Dead:
-    case GameState::Arrested: {
-      if (self.state_timer > 4.0f) {
-        self.respawn_player();
-        self.set_state(GameState::Playing);
       }
       break;
     }
   }
 
-  // the city keeps living behind the menus, it doubles as the title screen's attract mode
-  if (self.state != GameState::Paused) {
-    self.update_vehicles(input, dt);
+  // the local player's hands on the controls. Behind a menu they let go (online the city doesn't wait for them)
+  if (auto* me = self.local_player()) {
+    me->input = self.state == GameState::Playing ? input : GameInput{};
+  }
+
+  // the city keeps living behind the menus, it doubles as the title screen's attract mode. Offline the pause menu
+  // stops it; online it can't, the other players are still out there
+  const auto frozen = self.state == GameState::Paused && self.role == NetRole::Offline;
+  if (self.role == NetRole::Client) {
+    // nothing to simulate: pose what the host sent, walk our own character, smoke from the cars we can see
+    self.client_update(dt);
+    self.update_car_fx(dt);
+  } else if (!frozen) {
+    self.update_players(dt);
+    self.update_vehicles(dt);
     self.update_car_fx(dt);
     self.update_peds(dt);
-    self.update_crime(input, dt);
+    self.update_crime(dt);
   }
-  self.update_fx(real_dt);
-  self.update_camera(real_dt);
-  self.update_audio(real_dt);
-  self.update_hud();
+  if (!self.headless) {
+    self.update_fx(real_dt);
+    self.update_camera(real_dt);
+    self.update_audio(real_dt);
+    self.update_hud();
+  }
 
   // the paused world still has to reach the renderer (and RmlUi still needs its update), it just doesn't
   // advance: the gameplay and physics phases are switched off rather than stepping with a zero delta, which
   // flecs would read as "measure the frame time yourself"
-  const auto paused = self.state == GameState::Paused;
+  const auto paused = frozen;
   if (paused != self.phases_disabled) {
     self.phases_disabled = paused;
     if (paused) {
