@@ -6,7 +6,7 @@
 <body data-model="hud">
 	<div id="menu" data-if="menu_visible">
 		<div id="title">OXCITY</div>
-		<div id="tagline" data-if="!paused">Steal cars. Rob banks. Don't get arrested.</div>
+		<div id="tagline" data-if="!paused &amp;&amp; !join_open">Steal cars. Rob banks. Don't get arrested.</div>
 		<div id="tagline" data-if="paused &amp;&amp; !online">- PAUSED -</div>
 		<div id="tagline" data-if="paused &amp;&amp; online">- ONLINE: THE CITY DOESN'T WAIT -</div>
 
@@ -30,8 +30,10 @@
 				<span class="label">HOST</span>
 				<input id="address-input" type="text" maxlength="64" data-value="join_address"/>
 			</div>
-			<button class="button" data-event-click="join_game">JOIN GAME</button>
-			<button class="button" data-event-click="host_game">HOST GAME</button>
+			<div class="button-row">
+				<button class="button half" data-event-click="join_game">JOIN</button>
+				<button class="button half" data-event-click="host_game">HOST</button>
+			</div>
 			<button class="button" data-event-click="close_join">BACK</button>
 			<div id="join-hint">Up to 4 players. The host needs UDP port {{ host_port }} open. Free-for-all: everyone has their own wanted level.</div>
 		</div>

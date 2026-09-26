@@ -424,3 +424,13 @@ The full dedicated run (server + ALICE the shooter + BOB the target, 25 minutes 
 - ALICE was then shot dead by the police she'd been collecting stars from, which is how it should be.
 
 Snapshots peaked at 1282 bytes, under ENet's 1392-byte MTU, so they never fragment.
+
+The listen-server run (a scripted host, HOSTESS, and ALICE as the client) passed too:
+- ALICE joined "HOSTESS'S CITY" and walked around; the host saw the movement.
+- She killed a pedestrian and wasted HOSTESS.
+- She stole a MERIDIAN and drove it (`docs/screenshots/mp_listen_driving.png`).
+- When her process quit, the host logged "ALICE left" and freed the slot.
+
+The menu got a MULTIPLAYER panel with name and address fields bound to the data model
+(`mp_menu.png`). One RmlUi layout lesson: an `<input>`'s padding and border count towards its width,
+so a label and an input sized to exactly fill a row wrap onto two lines.

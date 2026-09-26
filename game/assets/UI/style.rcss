@@ -293,10 +293,12 @@ body {
 	font-size: 22dp;
 	font-weight: bold;
 	color: #19f0ff;
+	vertical-align: middle;
 }
 input {
 	display: inline-block;
-	width: 330dp;
+	width: 300dp;
+	vertical-align: middle;
 	height: 36dp;
 	padding: 6dp 10dp;
 	font-size: 22dp;
@@ -308,6 +310,19 @@ input {
 }
 input:focus {
 	border: 3dp #ff2a8a;
+}
+.button-row {
+	width: 440dp;
+	margin: 6dp auto;
+	text-align: center;
+}
+.button.half {
+	display: inline-block;
+	width: 196dp;
+	margin: 0 6dp;
+}
+#join {
+	margin-top: 10dp;
 }
 #join-hint {
 	margin: 16dp auto 0 auto;
@@ -353,6 +368,7 @@ input:focus {
 	top: 164dp;
 	right: 26dp;
 	width: 300dp;
+	vertical-align: middle;
 	padding: 6dp 10dp;
 	background-color: #00000088;
 	border-radius: 4dp;
